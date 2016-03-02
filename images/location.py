@@ -36,6 +36,7 @@ register_metadata_schema(_Location.DefaultLocationMetadata)
 
 
 SCANNABLE = ('drop', )
+IMPORTABLE = ('drop', 'upload')
 
 
 ############
@@ -76,7 +77,8 @@ class Location(PropertySet):
         subfolder = self.metadata.subfolder.format(**hints)
         return os.path.join(folder, subfolder)
 
-    def get_root(self):
+    @property
+    def root(self):
         return self.metadata.folder
 
     def calculate_urls(self):

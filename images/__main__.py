@@ -11,6 +11,8 @@ from . import entry
 from . import file
 from . import location
 from . import scanner
+from . import importer
+from .ingest import image
 
 
 if __name__ == '__main__':
@@ -37,7 +39,10 @@ if __name__ == '__main__':
     # Setting up workers
     logging.info("*** Setting up Workers...")
     managers = []
-    for module in (scanner, ):
+    for module in (
+        scanner,
+        importer,
+    ):
         logging.info("Starting %s manager..." % (module.__name__))
         managers.append(module.Manager())
     logging.info("*** Done setting up Workers.") 
@@ -51,6 +56,7 @@ if __name__ == '__main__':
         entry,
         tag,
         scanner,
+        importer,
     ):
         logging.info(
             "Setting up %s on %s..." % (module.__name__, module.App.BASE)

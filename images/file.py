@@ -1,3 +1,4 @@
+import os
 
 
 # DB MODEL
@@ -52,6 +53,10 @@ class File(PropertySet):
     filesize = Property(int, default=0)
     purpose = Property(enum=_File.Purpose, default=_File.Purpose.primary)
     mime = Property()
+
+    @property
+    def full_path(self):
+        return os.path.join(self.location.root, self.path)
 
     @classmethod
     def map_in(self, file):

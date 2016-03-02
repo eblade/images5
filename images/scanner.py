@@ -58,7 +58,7 @@ def get_scanners_dict():
 
 
 def trig_scan(location_id):
-    no_guests()
+    require_admin()
     manager = trig_scan.manager
     manager.trig(location_id)
     return {'result': 'ok'}
@@ -95,7 +95,7 @@ class FolderScanner(object):
 from threading import Thread, Event
 
 
-class Manager(object):
+class Manager:
     """
     A Thread+Event based Scanner Manager that keeps one thread per folder
     and trigs a new scan upon the trig method being called.
@@ -143,13 +143,14 @@ def scanning_loop(scan_event, location):
             try:
                 f = File(
                     path=filepath,
-                    location=Location(id=location.id),
+                    location=location,
                     purpose=_File.Purpose.source,
                 )
                 f = create_file(f)
                 logging.info(f.to_json())
                 e = Entry(
                     files=[f],
+                    import_location_id=location.id,
                     state=_Entry.State.import_ready,
                     user_id=metadata.user_id,
                     tags=metadata.tags,

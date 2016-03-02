@@ -71,40 +71,39 @@ class Setup:
     def add_locations(self):
         logging.info("Setting up locations...")
         with self.db.transaction() as t:
-            for name, path in self.config['Location'].items():
+            for section in self.config.sections():
+                if not section.startswith('Location:'):
+                    continue
+                name = section[9:]
+                location_data = {k: v for k, v in self.config[section].items()}
                 logging.debug("There should be a location '%s'.", name)
+
+                if 'wants' in location_data:
+                    location_data['wants'] = [
+                        b.strip() for b in location_data['wants'].split(',') if b
+                    ]
+                if 'tags' in location_data:
+                    location_data['tags'] = [
+                        b.strip() for b in location_data['tags'].split(',') if b
+                    ]
 
                 if t.query(_Location).filter(_Location.name==name).count() > 0:
                     logging.debug("Location '%s' exists, updating.", name)
                     location = get_location_by_name(name)
-                    location.metadata.folder = path
+                    location.metadata = _Location.DefaultLocationMetadata(location_data)
+                    location.type = location_data.get('type', name)
                     update_location_by_id(location.id, location)
-                    continue
-
-                extra_name = 'Location:%s' % name
-                extra = (self.config[extra_name] 
-                         if extra_name in self.config.sections() 
-                         else {})
-                extra = {k: v for k, v in extra.items()}
-                if 'wants' in extra:
-                    extra['wants'] = [
-                        b.strip() for b in extra['wants'].split(',') if b
-                    ]
-                if 'tags' in extra:
-                    extra['tags'] = [
-                        b.strip() for b in extra['tags'].split(',') if b
-                    ]
-
-                metadata = data=_Location.DefaultLocationMetadata(extra)
-                metadata.folder = path
-                type = extra.get('type', name)
-            
-                location = _Location(
-                    name=name,
-                    type=type,
-                    data=metadata.to_json(),
-                )
+                    logging.info("Updated location '%s'.", name)
+                else:
+                    metadata = _Location.DefaultLocationMetadata(location_data)
+                    metadata.folder = path
                 
-                t.add(location)
-                logging.info("Added location '%s'.", name)
+                    location = _Location(
+                        name=name,
+                        type=location_data.get('type', name),
+                        data=metadata.to_json(),
+                    )
+                    
+                    t.add(location)
+                    logging.info("Added location '%s'.", name)
         logging.info("Done with locations.")

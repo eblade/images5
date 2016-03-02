@@ -19,16 +19,18 @@ class _Entry(Base):
     class State(IntEnum):
         new = 0
         import_ready = 1
-        online = 2 
-        offline = 3 
-        failed = 4
-        delete = 5
-        deleted = 6
+        importing = 2
+        online = 3 
+        offline = 4 
+        import_failed = 5
+        delete = 6
+        deleted = 7
 
     class DefaultMetadata(PropertySet):
         title = Property()
         creator = Property()
         comment = Property()
+        error = Property()
 
     class DefaultPhysicalMetadata(PropertySet):
         pass
@@ -48,9 +50,9 @@ class _Entry(Base):
     id = Column(Integer, primary_key=True)
     original_filename = Column(String(256))
     source = Column(String(64))
+    import_location_id = Column(Integer, ForeignKey('location.id'))
     type = Column(Integer, nullable=False, default=Type.image)
     state = Column(Integer, nullable=False, default=State.new)
-    hidden = Column(Boolean, nullable=False, default=False)
     delete_ts = Column(DateTime(timezone=True))
     access = Column(Integer, nullable=False, default=Access.private)
     create_ts = Column(DateTime(timezone=True), default=func.now())
@@ -133,7 +135,7 @@ class App:
 
 from enum import IntEnum
 from .types import Property, PropertySet
-import os, datetime, logging, urllib
+import datetime, logging, urllib
 
 from .metadata import wrap_raw_json
 from .tag import ensure_tag
@@ -149,8 +151,8 @@ class Entry(PropertySet):
     original_filename = Property()
     export_filename = Property()
     source = Property()
+    import_location_id = Property(int)
     state = Property(enum=_Entry.State)
-    hidden = Property(bool, default=False)
     delete_ts = Property()
     deleted = Property(bool, default=False)
     access = Property(enum=_Entry.Access, default=_Entry.Access.private)
@@ -189,6 +191,13 @@ class Entry(PropertySet):
             sorted([("~%s~" % tag.lower()) for tag in self.tags if tag])
         )
 
+    @property
+    def source_file(self):
+        try:
+            return [file for file in self.files if file.purpose == _File.Purpose.source][0]
+        except IndexError:
+            return None
+
     def calculate_urls(self):
         self.self_url = '%s/%i' % (App.BASE, self.id)
         #for fd in self.files:
@@ -208,6 +217,7 @@ class Entry(PropertySet):
             access=_Entry.Access(entry.access),
             original_filename=entry.original_filename,
             source=entry.source,
+            import_location_id=entry.import_location_id,
             create_ts=entry.create_ts.strftime('%Y-%m-%d %H:%M:%S'),
             update_ts=entry.update_ts.strftime('%Y-%m-%d %H:%M:%S') \
                       if entry.update_ts else None,
@@ -216,7 +226,6 @@ class Entry(PropertySet):
             delete_ts=entry.delete_ts.strftime('%Y-%m-%d %H:%M:%S') \
                       if entry.delete_ts else None,
             deleted=entry.delete_ts is not None,
-            hidden=entry.hidden,
             files=[File.map_in(f) for f in entry.files] \
                   if entry.files else [],
             tags=sorted([Tag.map_in(t) for t in entry.tags]) \
@@ -231,8 +240,8 @@ class Entry(PropertySet):
         entry.original_filename = self.original_filename
         entry.export_filename = self.export_filename
         entry.source = self.source
+        entry.import_location_id = self.import_location_id
         entry.state = self.state
-        entry.hidden = self.hidden
         entry.taken_ts = (datetime.datetime.strptime(
             self.taken_ts, '%Y-%m-%d %H:%M:%S').replace(microsecond = 0)
             if self.taken_ts else None
@@ -277,8 +286,6 @@ class EntryQuery(PropertySet):
     video = Property(bool, default=False)
     audio = Property(bool, default=False)
     other = Property(bool, default=False)
-    show_hidden = Property(bool, default=False)
-    only_hidden = Property(bool, default=False)
     show_deleted = Property(bool, default=False)
     only_deleted = Property(bool, default=False)
     include_tags = Property(list)
@@ -312,9 +319,7 @@ class EntryQuery(PropertySet):
 
         eq.source = request.query.source
         
-        eq.show_hidden = request.query.show_hidden == 'yes'
         eq.show_deleted = request.query.show_deleted == 'yes'
-        eq.only_hidden = request.query.only_hidden == 'yes'
         eq.only_deleted = request.query.only_deleted == 'yes'
 
         decoded = request.query.decode()
@@ -336,9 +341,7 @@ class EntryQuery(PropertySet):
                 ('audio', 'yes' if self.audio else 'no'),
                 ('other', 'yes' if self.other else 'no'),
                 ('source', self.source),
-                ('show_hidden', 'yes' if self.show_hidden else 'no'),
                 ('show_deleted', 'yes' if self.show_deleted else 'no'),
-                ('only_hidden', 'yes' if self.only_hidden else 'no'),
                 ('only_deleted', 'yes' if self.only_deleted else 'no'),
             )
                 +
@@ -392,12 +395,8 @@ def get_entries(query=None, system=False):
             if types:
                 q = q.filter(_Entry.type.in_(types))
 
-            if not query.show_hidden:
-                q = q.filter(_Entry.hidden == False)
             if not query.show_deleted:
                 q = q.filter(_Entry.delete_ts == None)
-            if query.only_hidden:
-                q = q.filter(_Entry.hidden == True)
             if query.only_deleted:
                 q = q.filter(_Entry.delete_ts != None)
 
