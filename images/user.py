@@ -130,7 +130,7 @@ def basic_auth(username, password):
                 status=_User.Status(user.status),
                 name=user.name,
                 fullname=user.fullname,
-                user_class=_User.Class(user.user_class)
+                user_class=_User.Class(user.user_class),
             )
             logging.debug("Logged in as %s", user.name)
             return True
@@ -138,15 +138,15 @@ def basic_auth(username, password):
             return False
 
 
-def authenticate(*args):
+def authenticate(*args, realm='images'):
     """
     Bottle hook for authentication using basic auth
     """
     username, password = bottle.request.auth or (None, None)
     if username is None or not basic_auth(username, password):
-        err = HTTPError(401, text)
+        err = bottle.HTTPError(401, "Authentication failed")
         err.add_header('WWW-Authenticate', 'Basic realm="%s"' % realm)
-        return err
+        raise err
 
 
 def require_admin(*args, realm="private"):
@@ -154,7 +154,7 @@ def require_admin(*args, realm="private"):
     Bottle hook for requiring an Admin account
     """
     if not current_is_admin():
-        err = HTTPError(401, "Admin permission required")
+        err = bottle.HTTPError(401, "Admin permission required")
         err.add_header('WWW-Authenticate', 'Basic realm="%s"' % realm)
         return err
 
@@ -164,7 +164,7 @@ def no_guests(*args):
     Bottle hook for requiring higher class than Guest
     """
     if bottle.request.user.user_class is _User.Class.guest:
-        err = HTTPError(401, "Guests not allowed")
+        err = bottle.HTTPError(401, "Guests not allowed")
         return err
 
 
@@ -202,7 +202,7 @@ def require_user_id(user_id):
     Shorthand for requiring a certain user or raise a 401
     """
     if user_id != bottle.request.user.id:
-        raise HTTPError(401, "Access denied")
+        raise bottle.HTTPError(401, "Access denied")
 
 
 def get_user_by_id(user_id):
