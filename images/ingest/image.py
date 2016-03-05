@@ -1,6 +1,7 @@
 """Take care of Image imports, exports and proxy generation"""
 
-import logging, os
+import logging
+import os
 from PIL import Image
 import exifread
 from datetime import datetime
@@ -8,9 +9,9 @@ from datetime import datetime
 from .. import PROXY_SIZE, THUMB_SIZE
 from ..importer import GenericImportModule, register_import_module
 from ..localfile import FileCopy
-from ..entry import Entry, _Entry
+from ..entry import _Entry
 from ..file import File, _File, create_file
-from ..location import Location, _Location, get_location_by_type
+from ..location import get_location_by_type
 from ..exif import exif_position, exif_orientation, exif_string, exif_int, exif_ratio
 from ..types import Property
 from ..metadata import register_metadata_schema
@@ -48,7 +49,7 @@ class JPEGImportModule(GenericImportModule):
     def copy_original(self):
         filecopy = FileCopy(
             source_location=self.entry.source_file.location,
-            source_path=self.entry.source_file.path, 
+            source_path=self.entry.source_file.path,
             dest_location=self.image_location,
             dest_filename=self.entry.original_filename,
             link=True
@@ -60,7 +61,8 @@ class JPEGImportModule(GenericImportModule):
 
     def correct_folder(self, phmd):
         real_date = phmd.DateTimeOriginal
-        if not real_date: return
+        if not real_date:
+            return
 
         self.entry.taken_ts = (datetime.strptime(
                 real_date, '%Y:%m:%d %H:%M:%S').replace(microsecond=0)
@@ -114,7 +116,7 @@ class JPEGImportModule(GenericImportModule):
 
     def analyse(self):
         infile = self.image_path
-        
+
         exif = None
         with open(infile, 'rb') as f:
             exif = exifread.process_file(f)
@@ -122,7 +124,7 @@ class JPEGImportModule(GenericImportModule):
         orientation, mirror, angle = exif_orientation(exif)
         lon, lat = exif_position(exif)
         logging.debug(exif)
-        
+
         return {
             "Artist": exif_string(exif, "Image Artist"),
             "ColorSpace": exif_string(exif, "EXIF ColorSpace"),
@@ -190,7 +192,7 @@ def create_thumbnail(path_in, path_out, override=False, size=THUMB_SIZE, angle=N
         return
     try:
         os.makedirs(os.path.dirname(path_out))
-    except FileExistsError as e:
+    except FileExistsError:
         pass
     with open(path_out, 'w') as out:
         im = Image.open(path_in)
@@ -202,7 +204,7 @@ def create_thumbnail(path_in, path_out, override=False, size=THUMB_SIZE, angle=N
 def convert(path_in, path_out, longest_edge=PROXY_SIZE, angle=None, mirror=None):
     try:
         os.makedirs(os.path.dirname(path_out))
-    except FileExistsError as e:
+    except FileExistsError:
         pass
 
     with open(path_out, 'w') as out:
@@ -228,17 +230,17 @@ def _resize(img, box, fit, out, angle, mirror):
     @param angle: int - rotate with this angle
     @param mirror: str - mirror in this direction, None, "H" or "V"
     '''
-    #preresize image with factor 2, 4, 8 and fast algorithm
+    # Preresize image with factor 2, 4, 8 and fast algorithm
     factor = 1
     bw, bh = box
     iw, ih = img.size
     while (iw*2/factor > 2*bw) and (ih*2/factor > 2*bh):
-        factor *=2
+        factor *= 2
     factor /= 2
     if factor > 1:
         img.thumbnail((iw/factor, ih/factor), Image.NEAREST)
 
-    #calculate the cropping box and get the cropped part
+    # Calculate the cropping box and get the cropped part
     if fit:
         x1 = y1 = 0
         x2, y2 = img.size
@@ -250,9 +252,9 @@ def _resize(img, box, fit, out, angle, mirror):
         else:
             x1 = int(x2/2-box[0]*hRatio/2)
             x2 = int(x2/2+box[0]*hRatio/2)
-        img = img.crop((x1,y1,x2,y2))
+        img = img.crop((x1, y1, x2, y2))
 
-    #Resize the image with best quality algorithm ANTI-ALIAS
+    # Resize the image with best quality algorithm ANTI-ALIAS
     img.thumbnail(box, Image.ANTIALIAS)
     if mirror == 'H':
         img = img.transpose(Image.FLIP_RIGHT_LEFT)
@@ -261,6 +263,5 @@ def _resize(img, box, fit, out, angle, mirror):
     if angle:
         img = img.rotate(angle)
 
-    #save it into a file-like object
+    # Save it into a file-like object
     img.save(out, "JPEG", quality=75)
-
