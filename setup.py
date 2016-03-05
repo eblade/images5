@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-#from distutils.core import setup
 from setuptools import setup
 try:
     from setuptools_behave import behave_test
@@ -49,8 +48,8 @@ setup(
         "pyhamcrest",
     ],
     test_suite='features',
-    cmdclass = {
+    cmdclass={
         "test": behave_test,
     },
-    classifiers = classifiers
+    classifiers=classifiers,
 )
