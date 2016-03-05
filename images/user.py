@@ -1,13 +1,21 @@
 import logging
+import hashlib
+import bottle
+
+from enum import IntEnum
+from sqlalchemy import Column, String, Integer
+from sqlalchemy.orm.exc import NoResultFound
+from samtt import Base, get_db
+
+from .types import PropertySet, Property
+from .web import (
+    FetchByKey,
+    FetchById,
+)
 
 
 # DB MODEL
 ##########
-
-from enum import IntEnum
-from sqlalchemy import Column, String, Integer
-from samtt import Base
-from .types import PropertySet, Property
 
 
 class _User(Base):
@@ -44,30 +52,21 @@ class User(PropertySet):
     @classmethod
     def map_in(self, user):
         return User(
-            id = user.id,
-            status = _User.Status(user.status),
-            name = user.name,
-            fullname = user.fullname,
-            user_class = _User.Class(user.user_class)
+            id=user.id,
+            status=_User.Status(user.status),
+            name=user.name,
+            fullname=user.fullname,
+            user_class=_User.Class(user.user_class)
         )
 
 
 # WEB
 #####
 
-import bottle
-from .web import (
-    Create,
-    Fetch,
-    FetchByKey,
-    FetchById,
-    FetchByQuery,
-)
-
 
 class App:
     BASE = '/user'
-    
+
     @classmethod
     def create(self):
         app = bottle.Bottle()
@@ -107,10 +106,6 @@ def me():
 # UTILS
 #######
 
-import hashlib
-from samtt import get_db
-from sqlalchemy.orm.exc import NoResultFound
-
 
 def basic_auth(username, password):
     """
@@ -120,9 +115,9 @@ def basic_auth(username, password):
     with get_db().transaction() as t:
         try:
             user = (t.query(_User)
-                     .filter(_User.name==username)
-                     .filter(_User.password==password_hash(password))
-                     .filter(_User.status==_User.Status.enabled)
+                     .filter(_User.name == username)
+                     .filter(_User.password == password_hash(password))
+                     .filter(_User.status == _User.Status.enabled)
                      .one())
 
             bottle.request.user = User(
@@ -225,4 +220,3 @@ def get_user_by_name(name):
             return User.map_in(user)
         except NoResultFound:
             raise bottle.HTTPError(404)
-
