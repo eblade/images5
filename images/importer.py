@@ -5,29 +5,29 @@ import mimetypes
 import os
 import re
 import base64
+import bottle
+
+from sqlalchemy.orm.exc import NoResultFound
+from samtt import get_db
+from threading import Thread, Event
+
+from .file import File, _File, create_file
+from .entry import Entry, _Entry, create_entry, update_entry_by_id
 from .location import Location, get_locations_by_type, get_location_by_type, IMPORTABLE
+from .metadata import wrap_raw_json
+from .user import authenticate, require_admin, no_guests, get_current_user
+
 
 re_clean = re.compile(r'[^A-Za-z0-9_\-\.]')
+
 
 # WEB
 #####
 
-import bottle
-from .web import (
-    Create,
-    Fetch,
-    FetchByKey,
-    FetchById,
-    FetchByQuery,
-)
-from .user import authenticate, require_admin, no_guests, current_user_id
-from .file import File, _File, create_file
-from .entry import Entry, _Entry, create_entry, get_entries, update_entry_by_id
-
 
 class App:
     BASE = '/importer'
-    
+
     @classmethod
     def create(self):
         app = bottle.Bottle()
@@ -84,7 +84,7 @@ def upload(source, filename):
     no_guests()
     filename = re_clean.sub('_', os.path.normpath(filename))
     if '..' in filename:
-        raise(HTTPError(400))
+        raise(bottle.HTTPError(400))
     location = get_location_by_type(Location.Type.upload)
     folder = location.suggest_folder(source=source)
     try:
@@ -94,7 +94,6 @@ def upload(source, filename):
     destination = os.path.join(folder, filename)
     logging.info("Storing file at %s.", destination)
 
-    
     f = File(
         path=destination,
         location=location,
@@ -113,15 +112,15 @@ def upload(source, filename):
     logging.info(e.to_json())
 
     with open(destination, 'w+b') as disk:
-        data = request.body.read()
-        logging.info(request.headers['Content-Type'])
-        if request.headers['Content-Type'].startswith('base64'):
+        data = bottle.request.body.read()
+        logging.info(bottle.request.headers['Content-Type'])
+        if bottle.request.headers['Content-Type'].startswith('base64'):
             data = base64.b64decode(data[22:])
             logging.info("Writing %i bytes after base64 decode", len(data))
         else:
             logging.info("Writing %i bytes without decode", len(data))
         disk.write(data)
-    request.body.close()
+    bottle.request.body.close()
 
     trig_import(location.id)
 
@@ -145,6 +144,7 @@ def get_reset_url(import_job_id):
 
 mime_map = {}
 
+
 def register_import_module(mime_type, module):
     mime_map[mime_type] = module
 
@@ -162,18 +162,13 @@ class GenericImportModule(object):
 # API
 #####
 
-from datetime import datetime, timedelta
-from sqlalchemy.orm.exc import NoResultFound
-from samtt import get_db
-from .metadata import wrap_raw_json
-
 
 def pick_up_import_ready_entry(location_id):
     with get_db().transaction() as t:
         try:
             entry = t.query(_Entry).filter(
-                _Entry.import_location_id==location_id,
-                _Entry.state==_Entry.State.import_ready,
+                _Entry.import_location_id == location_id,
+                _Entry.state == _Entry.State.import_ready,
             ).order_by(_Entry.create_ts).first()
             if entry is None:
                 return None
@@ -206,8 +201,6 @@ def reset_entry(entry_id):
 # IMPORT MANAGER
 ################
 
-from threading import Thread, Event
-
 
 class Manager:
     """
@@ -238,7 +231,7 @@ class Manager:
             raise NameError("No thread for location %i", location_id)
         logging.info("Trigging import event for location %i", location_id)
         event.set()
-                
+
 
 def importing_loop(import_event, location):
     """
@@ -263,7 +256,8 @@ def importing_loop(import_event, location):
             ImportModule = get_import_module(mime_type)
 
             if ImportModule is None:
-                fail_import(entry, 
+                fail_import(
+                    entry,
                     "Could not find a suitable import module for MIME Type %s" % mime_type
                 )
                 continue
@@ -272,9 +266,7 @@ def importing_loop(import_event, location):
             try:
                 import_module.run()
             except Exception as e:
-                fail_import(entry, 
-                    "Import failed %s" % str(e)
-                )
+                fail_import(entry, "Import failed %s" % str(e))
                 continue
 
             entry.state = _Entry.State.online
