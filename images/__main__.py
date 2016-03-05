@@ -20,7 +20,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(usage="images")
     parser.add_argument(
         '-c', '--config',
-         default=os.getenv('IMAGES_CONFIG', 'images.ini'),
+        default=os.getenv('IMAGES_CONFIG', 'images.ini'),
         help='specify what config file to run on')
     parser.add_argument(
         '-g', '--debug', action="store_true",
@@ -37,7 +37,7 @@ if __name__ == '__main__':
     setup.create_database_tables()
     setup.add_users()
     setup.add_locations()
-    logging.info("*** Done setting up Databse.") 
+    logging.info("*** Done setting up Databse.")
 
     # Setting up workers
     if not args.no_workers:
@@ -49,7 +49,7 @@ if __name__ == '__main__':
         ):
             logging.info("Starting %s manager..." % (module.__name__))
             managers.append(module.Manager())
-        logging.info("*** Done setting up Workers.") 
+        logging.info("*** Done setting up Workers.")
 
     # Web-Apps
     logging.info("*** Setting up Web-Apps...")
@@ -66,7 +66,7 @@ if __name__ == '__main__':
             "Setting up %s on %s..." % (module.__name__, module.App.BASE)
         )
         app.mount(module.App.BASE, module.App.create())
-    logging.info("*** Done setting up Web-apps.") 
+    logging.info("*** Done setting up Web-apps.")
 
     # Serve the Web-App
     app.run(
