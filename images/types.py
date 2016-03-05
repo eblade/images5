@@ -1,6 +1,7 @@
 import json
 from .metadata import wrap_dict, wrap_raw_json
 
+
 class Property(object):
     def __init__(self, type=str, name=None, default=None, enum=None,
                  required=False, validator=None, wrap=False, none=None):
@@ -12,7 +13,7 @@ class Property(object):
         self.default = default
         self.wrap = wrap
         self.none = none
-    
+
     def __property_config__(self, model_class, property_name):
         self.model_class = model_class
         if self.name is None:
@@ -38,11 +39,11 @@ class Property(object):
                     return value
             except AttributeError:
                 return self.default
-    
+
     def __set__(self, model_instance, value):
         value = self.validate(value)
         setattr(model_instance, self.attr_name, value)
-    
+
     def is_empty(self, value):
         return value is None
 
@@ -88,13 +89,13 @@ class Property(object):
         if self.enum is not None:
             if not isinstance(value, self.enum):
                 raise ValueError("Property %s must be enum of type %s" % (self.name, repr(self.enum)))
-        
+
         # External Validator
         if callable(self.validator):
             self.validator(value)
 
         return value
-    
+
     @property
     def attr_name(self):
         return '_' + self.name
@@ -106,8 +107,8 @@ class Property(object):
 
 def _initialize_properties(model_class, name, bases, dct):
     model_class._properties = {}
-    
     property_source = {}
+
     def get_attr_source(name, cls):
         for src_cls in cls.mro():
             if name in src_cls.__dict__:
@@ -154,7 +155,7 @@ class ClassWithProperties(type):
     def __init__(cls, name, bases, dct):
         super(ClassWithProperties, cls).__init__(name, bases, dct)
         _initialize_properties(cls, name, bases, dct)
-        
+
 
 class PropertySet(metaclass=ClassWithProperties):
     def __init__(self, *args, **values):
@@ -182,16 +183,13 @@ class PropertySet(metaclass=ClassWithProperties):
     def from_dict(self, dct):
         for attr_name in self._all_properties:
             if attr_name in dct:
-                setattr(self, attr_name, dct.get(attr_name)) 
-
-    def from_row(self, row):
-        raise NotImplemented
+                setattr(self, attr_name, dct.get(attr_name))
 
     @classmethod
-    def FromRow(cls, dct, prefix=None):
+    def FromDict(cls, dct):
         if dct is not None:
             inst = cls()
-            inst.from_row(dct, prefix=prefix)
+            inst.from_dict(dct)
             return inst
 
     @classmethod
@@ -199,20 +197,3 @@ class PropertySet(metaclass=ClassWithProperties):
         inst = cls()
         inst.from_json(json_string)
         return inst
-
-
-
-def strip(dct, prefix):
-    if prefix is None:
-        return dct
-    else:
-        length = len(prefix) + 1
-        return {k[length:]: dct[k] for k in dct.keys() if k.startswith(prefix + '.')}
-
-def first(*objects):
-    """
-    Return the first non-None object in objects.
-    """
-    for obj in objects:
-        if obj is not None:
-            return obj
