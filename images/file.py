@@ -1,19 +1,23 @@
 import os
 
+from enum import IntEnum
+from sqlalchemy import Column, String, Integer, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
+from sqlalchemy.exc import IntegrityError
+from samtt import Base, get_db
+
+from .location import Location
+from .types import PropertySet, Property
+
 
 # DB MODEL
 ##########
 
-from enum import IntEnum
-from sqlalchemy import Column, String, Integer, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import relationship
-from samtt import Base
-from .types import PropertySet, Property
 
 class _File(Base):
     __tablename__ = 'file'
     __table_args__ = (
-        UniqueConstraint('location_id', 'path', name='path_constraint'), 
+        UniqueConstraint('location_id', 'path', name='path_constraint'),
     )
 
     class Purpose(IntEnum):
@@ -40,10 +44,6 @@ class _File(Base):
 # DESCRIPTOR
 ############
 
-from enum import IntEnum
-from .types import PropertySet, Property
-from .location import Location
-
 
 class File(PropertySet):
     id = Property(int)
@@ -60,7 +60,7 @@ class File(PropertySet):
 
     @classmethod
     def map_in(self, file):
-        f = File( 
+        f = File(
             id=file.id,
             path=file.path,
             location=Location.map_in(file.location) if file.location else None,
@@ -88,9 +88,6 @@ class FileFeed(PropertySet):
 # API
 #####
 
-from samtt import get_db
-from sqlalchemy.exc import IntegrityError
-
 
 def get_file_by_id(id):
     with get_db().transaction() as t:
@@ -107,7 +104,7 @@ def create_file(f):
             t.commit()
             id = _f.id
             return get_file_by_id(id)
-        except IntegrityError as e:
+        except IntegrityError:
             t.rollback()
     raise _File.ConflictException()
 
@@ -122,4 +119,4 @@ def update_file_by_id(id, f):
 
 def delete_file_by_id(id):
     with get_db().transaction() as t:
-        q = t.query(_File).filter(_File.id==id).delete()
+        t.query(_File).filter(_File.id == id).delete()
