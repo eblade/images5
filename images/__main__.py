@@ -25,6 +25,9 @@ if __name__ == '__main__':
     parser.add_argument(
         '-g', '--debug', action="store_true",
         help='show debug messages')
+    parser.add_argument(
+        '--no-workers', action="store_true",
+        help='do not start any worker threads doing scanning and imports and such')
 
     args = parser.parse_args()
 
@@ -37,15 +40,16 @@ if __name__ == '__main__':
     logging.info("*** Done setting up Databse.") 
 
     # Setting up workers
-    logging.info("*** Setting up Workers...")
-    managers = []
-    for module in (
-        scanner,
-        importer,
-    ):
-        logging.info("Starting %s manager..." % (module.__name__))
-        managers.append(module.Manager())
-    logging.info("*** Done setting up Workers.") 
+    if not args.no_workers:
+        logging.info("*** Setting up Workers...")
+        managers = []
+        for module in (
+            scanner,
+            importer,
+        ):
+            logging.info("Starting %s manager..." % (module.__name__))
+            managers.append(module.Manager())
+        logging.info("*** Done setting up Workers.") 
 
     # Web-Apps
     logging.info("*** Setting up Web-Apps...")
