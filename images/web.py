@@ -7,11 +7,11 @@ class App:
     HTML = 'web'
     JS = os.path.join(HTML, 'js')
     CSS = os.path.join(HTML, 'css')
-    
+
     @classmethod
     def create(self):
         app = bottle.Bottle()
-        
+
         # Static files
         app.route(
             path='/',
@@ -107,5 +107,3 @@ def DeleteById(function, pre=None):
         function(id)
         raise bottle.HTTPError(204)
     return f
-
-
