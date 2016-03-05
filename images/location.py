@@ -1,15 +1,25 @@
 import logging
 import datetime
 import os
+import bottle
+
+from samtt import Base, get_db
+from sqlalchemy import Column, String, Integer
+
+from .metadata import register_metadata_schema, wrap_raw_json
+from .types import Property, PropertySet
+from .web import (
+    Create,
+    Fetch,
+    FetchById,
+    UpdateById,
+    DeleteById,
+)
+from .user import authenticate, require_admin
 
 
 # DB MODEL
 ##########
-
-from samtt import Base, get_db
-from sqlalchemy import Column, String, Integer
-from .metadata import register_metadata_schema
-from .types import Property, PropertySet
 
 
 class _Location(Base):
@@ -40,11 +50,7 @@ IMPORTABLE = ('drop', 'upload')
 
 
 ############
-# DESCRIPTOR 
-
-from enum import IntEnum
-from .types import Property, PropertySet
-from .metadata import wrap_raw_json
+# DESCRIPTOR
 
 
 class Location(PropertySet):
@@ -83,12 +89,12 @@ class Location(PropertySet):
 
     def calculate_urls(self):
         self.self_url = '%s/%i' % (App.BASE, self.id)
-        #self.trig_scan_url = api.url().scanner.get_trig_url(self.id)
-        #self.trig_import_url = api.url().import_job.get_trig_url(self.id)
+        # self.trig_scan_url = api.url().scanner.get_trig_url(self.id)
+        # self.trig_import_url = api.url().import_job.get_trig_url(self.id)
 
     @classmethod
     def map_in(self, location):
-        ld = Location( 
+        ld = Location(
             id=location.id,
             type=location.type,
             name=location.name,
@@ -98,10 +104,11 @@ class Location(PropertySet):
         return ld
 
     def map_out(self, location):
-       location.name = self.name
-       location.type = self.type
-       location.data = self.metadata.to_json() \
-                       if self.metadata is not None else None
+        location.name = self.name
+        location.type = self.type
+        location.data = (
+            self.metadata.to_json() if self.metadata is not None else None
+        )
 
 
 class LocationFeed(PropertySet):
@@ -112,22 +119,10 @@ class LocationFeed(PropertySet):
 # WEB
 #####
 
-import bottle
-from .web import (
-    Create,
-    Fetch,
-    FetchByKey,
-    FetchById,
-    FetchByQuery,
-    UpdateById,
-    DeleteById,
-)
-from .user import authenticate, require_admin
-
 
 class App:
     BASE = '/location'
-    
+
     @classmethod
     def create(self):
         app = bottle.Bottle()
@@ -195,13 +190,13 @@ def download(id, path):
 
 def get_location_by_id(id):
     with get_db().transaction() as t:
-        location = t.query(_Location).filter(_Location.id==id).one()
+        location = t.query(_Location).filter(_Location.id == id).one()
         return Location.map_in(location)
 
 
 def get_location_by_name(name):
     with get_db().transaction() as t:
-        location = t.query(_Location).filter(_Location.name==name).one()
+        location = t.query(_Location).filter(_Location.name == name).one()
         return Location.map_in(location)
 
 
@@ -251,7 +246,7 @@ def create_location(ld):
 
 def update_location_by_id(id, ld):
     with get_db().transaction() as t:
-        q = t.query(_Location).filter(_Location.id==id)
+        q = t.query(_Location).filter(_Location.id == id)
         location = q.one()
         ld.map_out(location)
 
@@ -260,4 +255,4 @@ def update_location_by_id(id, ld):
 
 def delete_location_by_id(id):
     with get_db().transaction() as t:
-        q = t.query(_Location).filter(_Location.id==id).delete()
+        t.query(_Location).filter(_Location.id == id).delete()
