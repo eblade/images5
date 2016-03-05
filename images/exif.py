@@ -16,14 +16,18 @@ def exif_position(exif):
     """Reads exifread tags and extracts a float tuple (lat, lon)"""
     lat = exif.get("GPS GPSLatitude")
     lon = exif.get("GPS GPSLongitude")
-    if None in (lat, lon): return None, None
+    if None in (lat, lon):
+        return None, None
 
     lat = dms_to_float(lat)
     lon = dms_to_float(lon)
-    if None in (lat, lon): return None, None
+    if None in (lat, lon):
+        return None, None
 
-    if exif.get('GPS GPSLatitudeRef').printable == 'S': lat *= -1
-    if exif.get('GPS GPSLongitudeRef').printable == 'S': lon *= -1
+    if exif.get('GPS GPSLatitudeRef').printable == 'S':
+        lat *= -1
+    if exif.get('GPS GPSLongitudeRef').printable == 'S':
+        lon *= -1
 
     return lat, lon
 
@@ -68,7 +72,8 @@ def exif_ratio(exif, key):
 
 def exif_orientation(exif):
     orientation = exif.get("Image Orientation")
-    if orientation is None: return None, None, 0
+    if orientation is None:
+        return None, None, 0
 
     mirror, angle = orientation2angle.get(orientation.printable)
     return orientation.printable, mirror, angle
