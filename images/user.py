@@ -170,10 +170,17 @@ def password_hash(string):
 #####
 
 
-def current_user_id():
+def get_current_user():
     """
     Shorthand for retrieving the currently logged in user, if any.
     """
+    try:
+        return bottle.request.user
+    except AttributeError:
+        return None
+
+
+def current_user_id():
     try:
         return bottle.request.user.id
     except AttributeError:

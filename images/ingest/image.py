@@ -6,7 +6,6 @@ from PIL import Image
 import exifread
 from datetime import datetime
 
-from .. import PROXY_SIZE, THUMB_SIZE
 from ..importer import GenericImportModule, register_import_module
 from ..localfile import FileCopy
 from ..entry import _Entry
@@ -15,6 +14,10 @@ from ..location import get_location_by_type
 from ..exif import exif_position, exif_orientation, exif_string, exif_int, exif_ratio
 from ..types import Property
 from ..metadata import register_metadata_schema
+
+
+PROXY_SIZE = 1280
+THUMB_SIZE = 200
 
 
 class JPEGImportModule(GenericImportModule):

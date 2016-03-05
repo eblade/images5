@@ -1,0 +1,28 @@
+images5
+=======
+
+Built for the cloud.
+
+Installation
+------------
+
+Requirements:
+
+- python>=3.5
+- pillow
+- sqlalchemy
+- bottle
+
+
+Before installing pillow (PIL):
+
+Make sure you have `libjpeg-dev` that provides for JPEG decoding:
+
+.. code:: bash
+    sudo apt install libjpeg-dev # or yum install libjpeg-devel or whatever
+    sudo pip3 install pillow
+
+If you still don't have the JPEG decoder:
+
+.. code:: bash
+    sudo pip3 install -I --no-cache-dir pillow
