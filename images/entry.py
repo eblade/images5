@@ -1,16 +1,32 @@
 import logging
+import bottle
+import datetime
+import urllib
+
+from sqlalchemy import Column, DateTime, String, Integer, Float, ForeignKey, func
+from sqlalchemy.orm import relationship
+from samtt import get_db, Base
+from enum import IntEnum
+
+from .file import File, _File
+from .metadata import register_metadata_schema, wrap_raw_json
+from .tag import Tag, _Tag, ensure_tag
+from .types import PropertySet, Property
+from .web import (
+    Create,
+    FetchById,
+    FetchByQuery,
+    UpdateById,
+    DeleteById,
+)
+from .user import authenticate, no_guests, current_user_id, current_is_user
+
+
+DELETE_AFTER = 24  # hours
 
 
 # DB MODEL
 ##########
-
-from sqlalchemy import Column, DateTime, String, Integer, Boolean, Float, \
-                       ForeignKey, func
-from sqlalchemy.orm import relationship
-from samtt import Base
-from enum import IntEnum
-from .types import PropertySet, Property
-from .metadata import register_metadata_schema
 
 
 class _Entry(Base):
@@ -20,8 +36,8 @@ class _Entry(Base):
         new = 0
         import_ready = 1
         importing = 2
-        online = 3 
-        offline = 4 
+        online = 3
+        offline = 4
         import_failed = 5
         delete = 6
         deleted = 7
@@ -80,22 +96,10 @@ register_metadata_schema(_Entry.DefaultPhysicalMetadata)
 # WEB
 #####
 
-import bottle
-from .web import (
-    Create,
-    Fetch,
-    FetchByKey,
-    FetchById,
-    FetchByQuery,
-    UpdateById,
-    DeleteById,
-)
-from .user import authenticate, require_admin, no_guests
-
 
 class App:
     BASE = '/entry'
-    
+
     @classmethod
     def create(self):
         app = bottle.Bottle()
@@ -116,6 +120,12 @@ class App:
             apply=no_guests,
         )
         app.route(
+            path='/',
+            method='POST',
+            callback=Create(create_entry, Entry),
+            apply=no_guests,
+        )
+        app.route(
             path='/<id:int>',
             method='DELETE',
             callback=DeleteById(delete_entry_by_id),
@@ -126,23 +136,12 @@ class App:
             callback=lambda source, filename: get_entry_by_source(source, filename).to_json(),
             apply=no_guests,
         )
-        
+
         return app
 
 
 # DESCRIPTOR
 ############
-
-from enum import IntEnum
-from .types import Property, PropertySet
-import datetime, logging, urllib
-
-from .metadata import wrap_raw_json
-from .tag import ensure_tag
-from .file import File, _File
-from .entry import _Entry
-
-DELETE_AFTER = 24  # hours
 
 
 class Entry(PropertySet):
@@ -158,7 +157,7 @@ class Entry(PropertySet):
     access = Property(enum=_Entry.Access, default=_Entry.Access.private)
     files = Property(list)
     tags = Property(list)
-    
+
     create_ts = Property()
     update_ts = Property()
     taken_ts = Property()
@@ -200,17 +199,17 @@ class Entry(PropertySet):
 
     def calculate_urls(self):
         self.self_url = '%s/%i' % (App.BASE, self.id)
-        #for fd in self.files:
-        #    if fd.purpose == FileDescriptor.Purpose.primary:
-        #        self.primary_url = api.url().location.get_download_url(fd.location_id, fd.path)
-        #    if fd.purpose == FileDescriptor.Purpose.proxy:
-        #        self.proxy_url = api.url().location.get_download_url(fd.location_id, fd.path)
-        #    if fd.purpose == FileDescriptor.Purpose.thumb:
-        #        self.thumb_url = api.url().location.get_download_url(fd.location_id, fd.path)
+        # for fd in self.files:
+        #     if fd.purpose == FileDescriptor.Purpose.primary:
+        #         self.primary_url = api.url().location.get_download_url(fd.location_id, fd.path)
+        #     if fd.purpose == FileDescriptor.Purpose.proxy:
+        #         self.proxy_url = api.url().location.get_download_url(fd.location_id, fd.path)
+        #     if fd.purpose == FileDescriptor.Purpose.thumb:
+        #         self.thumb_url = api.url().location.get_download_url(fd.location_id, fd.path)
 
     @classmethod
     def map_in(self, entry):
-        ed = Entry( 
+        ed = Entry(
             id=entry.id,
             user_id=entry.user_id,
             state=_Entry.State(entry.state),
@@ -219,21 +218,16 @@ class Entry(PropertySet):
             source=entry.source,
             import_location_id=entry.import_location_id,
             create_ts=entry.create_ts.strftime('%Y-%m-%d %H:%M:%S'),
-            update_ts=entry.update_ts.strftime('%Y-%m-%d %H:%M:%S') \
-                      if entry.update_ts else None,
-            taken_ts=entry.taken_ts.strftime('%Y-%m-%d %H:%M:%S') \
-                     if entry.taken_ts else None,
-            delete_ts=entry.delete_ts.strftime('%Y-%m-%d %H:%M:%S') \
-                      if entry.delete_ts else None,
+            update_ts=entry.update_ts.strftime('%Y-%m-%d %H:%M:%S') if entry.update_ts else None,
+            taken_ts=entry.taken_ts.strftime('%Y-%m-%d %H:%M:%S') if entry.taken_ts else None,
+            delete_ts=entry.delete_ts.strftime('%Y-%m-%d %H:%M:%S') if entry.delete_ts else None,
             deleted=entry.delete_ts is not None,
-            files=[File.map_in(f) for f in entry.files] \
-                  if entry.files else [],
-            tags=sorted([Tag.map_in(t) for t in entry.tags]) \
-                 if entry.tags else [],
+            files=[File.map_in(f) for f in entry.files] if entry.files else [],
+            tags=sorted([Tag.map_in(t) for t in entry.tags]) if entry.tags else [],
             metadata=wrap_raw_json(entry.data),
             physical_metadata=wrap_raw_json(entry.physical_data),
         )
-        #ed.calculate_urls()
+        # ed.calculate_urls()
         return ed
 
     def map_out(self, entry, system=False):
@@ -243,24 +237,24 @@ class Entry(PropertySet):
         entry.import_location_id = self.import_location_id
         entry.state = self.state
         entry.taken_ts = (datetime.datetime.strptime(
-            self.taken_ts, '%Y-%m-%d %H:%M:%S').replace(microsecond = 0)
+            self.taken_ts, '%Y-%m-%d %H:%M:%S').replace(microsecond=0)
             if self.taken_ts else None
         )
         if self.deleted and self.delete_ts is None:
             self.delete_ts = ((
-                datetime.datetime.utcnow() 
-                + datetime.timedelta(hours=DELETE_AFTER)
+                datetime.datetime.utcnow() + datetime.timedelta(hours=DELETE_AFTER)
             ).strftime('%Y-%m-%d %H:%M:%S'))
         elif self.deleted is False and self.delete_ts is not None:
             self.delete_ts = None
         entry.delete_ts = (datetime.datetime.strptime(
-            self.delete_ts, '%Y-%m-%d %H:%M:%S').replace(microsecond = 0)
+            self.delete_ts, '%Y-%m-%d %H:%M:%S').replace(microsecond=0)
             if self.delete_ts else None
         )
         entry.access = self.access
         entry.data = self.metadata.to_json() if self.metadata else None
-        entry.physical_data = self.physical_metadata.to_json() \
-                              if self.physical_metadata else None
+        entry.physical_data = (
+            self.physical_metadata.to_json() if self.physical_metadata else None
+        )
         entry.user_id = self.user_id
         entry.parent_entry_id = self.parent_entry_id
         entry.latitude = self.latitude
@@ -301,32 +295,32 @@ class EntryQuery(PropertySet):
     def FromQuery(self):
         eq = EntryQuery()
 
-        eq.start_ts = request.query.start_ts
-        eq.end_ts = request.query.end_ts
+        eq.start_ts = bottle.request.query.start_ts
+        eq.end_ts = bottle.request.query.end_ts
 
-        eq.next_ts = request.query.next_ts
-        if not request.query.prev_offset in (None, ''):
-            eq.prev_offset = request.query.prev_offset
-        if not request.query.page_size in (None, ''):
-            eq.page_size = request.query.page_size
-        if not request.query.order in (None, ''):
-            eq.order = request.query.order
+        eq.next_ts = bottle.request.query.next_ts
+        if bottle.request.query.prev_offset not in (None, ''):
+            eq.prev_offset = bottle.request.query.prev_offset
+        if bottle.request.query.page_size not in (None, ''):
+            eq.page_size = bottle.request.query.page_size
+        if bottle.request.query.order not in (None, ''):
+            eq.order = bottle.request.query.order
 
-        eq.image = request.query.image == 'yes'
-        eq.video = request.query.video == 'yes'
-        eq.audio = request.query.audio == 'yes'
-        eq.other = request.query.other == 'yes'
+        eq.image = bottle.request.query.image == 'yes'
+        eq.video = bottle.request.query.video == 'yes'
+        eq.audio = bottle.request.query.audio == 'yes'
+        eq.other = bottle.request.query.other == 'yes'
 
-        eq.source = request.query.source
-        
-        eq.show_deleted = request.query.show_deleted == 'yes'
-        eq.only_deleted = request.query.only_deleted == 'yes'
+        eq.source = bottle.request.query.source
 
-        decoded = request.query.decode()
+        eq.show_deleted = bottle.request.query.show_deleted == 'yes'
+        eq.only_deleted = bottle.request.query.only_deleted == 'yes'
+
+        decoded = bottle.request.query.decode()
         eq.include_tags = decoded.getall('include_tags')
         eq.exclude_tags = decoded.getall('exclude_tags')
         return eq
-    
+
     def to_query_string(self):
         return urllib.parse.urlencode(
             (
@@ -343,12 +337,10 @@ class EntryQuery(PropertySet):
                 ('source', self.source),
                 ('show_deleted', 'yes' if self.show_deleted else 'no'),
                 ('only_deleted', 'yes' if self.only_deleted else 'no'),
-            )
-                +
+            ) +
             tuple([
                 ('include_tags', tag) for tag in self.include_tags
-            ])
-                +
+            ]) +
             tuple([
                 ('exclude_tags', tag) for tag in self.exclude_tags
             ])
@@ -358,19 +350,15 @@ class EntryQuery(PropertySet):
 #####
 # API
 
-from samtt import get_db
-from .user import current_user_id, current_is_user
-
 
 def get_entries(query=None, system=False):
     with get_db().transaction() as t:
-        q = (t.query(_Entry)
-              .order_by(_Entry.taken_ts.desc(), _Entry.create_ts.desc())
+        q = (
+            t.query(_Entry).order_by(_Entry.taken_ts.desc(), _Entry.create_ts.desc())
         )
         if not system:
             q = q.filter(
-                  (_Entry.user_id == current_user_id())
-                | (_Entry.access >= _Entry.Access.users)
+                (_Entry.user_id == current_user_id()) | (_Entry.access >= _Entry.Access.users)
             )
 
             if not current_is_user():
@@ -378,7 +366,7 @@ def get_entries(query=None, system=False):
 
         if query is not None:
             logging.info("Query: %s", query.to_json())
-            
+
             if query.start_ts:
                 start_ts = (datetime.datetime.strptime(
                     query.start_ts, '%Y-%m-%d')
@@ -390,15 +378,15 @@ def get_entries(query=None, system=False):
                     query.end_ts, '%Y-%m-%d')
                     .replace(hour=0, minute=0, second=0, microsecond=0))
                 q = q.filter(_Entry.taken_ts < end_ts)
-            
+
             types = [t.value for t in _Entry.Type if getattr(query, t.name)]
             if types:
                 q = q.filter(_Entry.type.in_(types))
 
             if not query.show_deleted:
-                q = q.filter(_Entry.delete_ts == None)
+                q = q.filter(_Entry.delete_ts.is_(None))
             if query.only_deleted:
-                q = q.filter(_Entry.delete_ts != None)
+                q = q.filter(_Entry.delete_ts.isnot(None))
 
             for tag in query.include_tags:
                 q = q.filter(_Entry.tags.like('%~' + tag + '~%'))
@@ -441,26 +429,27 @@ def get_entries(query=None, system=False):
             count=count,
             total_count=total_count,
             offset=offset,
-            entries = [Entry.map_in(entry) for entry in entries])
-        
+            entries=[Entry.map_in(entry) for entry in entries],
+        )
+
         # Paging
         if query is not None:
             if total_count > count:
                 query.next_ts = result.entries[-1].taken_ts
-                result.next_link = BASE + '?' + query.to_query_string()
+                result.next_link = App.BASE + '?' + query.to_query_string()
 
             if count > 0 and offset > 0:
                 query.next_ts = ''
                 query.prev_offset = max(offset - page_size, 0)
-                result.prev_link = BASE + '?' + query.to_query_string()
+                result.prev_link = App.BASE + '?' + query.to_query_string()
 
         return result
 
 
 def get_entry_by_id(id):
     with get_db().transaction() as t:
-        entry = t.query(_Entry).filter(_Entry.id==id).one()
-        return Entry.map_in(entry) 
+        entry = t.query(_Entry).filter(_Entry.id == id).one()
+        return Entry.map_in(entry)
 
 
 def get_entry_by_source(source, filename, system=False):
@@ -470,15 +459,16 @@ def get_entry_by_source(source, filename, system=False):
             _Entry.original_filename == filename
         )
         if not system:
-            q = q.filter((_Entry.user_id == current_user_id()) 
-                       | (_Entry.access >= _Entry.Access.public))
+            q = q.filter(
+                (_Entry.user_id == current_user_id()) | (_Entry.access >= _Entry.Access.public)
+            )
         entry = q.one()
-        return Entry.map_in(entry) 
+        return Entry.map_in(entry)
 
 
 def update_entry_by_id(id, ed, system=False):
     with get_db().transaction() as t:
-        q = t.query(_Entry).filter(_Entry.id==id)
+        q = t.query(_Entry).filter(_Entry.id == id)
         if not system:
             q = q.filter(
                 (_Entry.user_id == current_user_id()) | (_Entry.access >= _Entry.Access.common)
@@ -506,7 +496,7 @@ def create_entry(ed, system=False):
 
 def delete_entry_by_id(id, system=False):
     with get_db().transaction() as t:
-        q = t.query(_Entry).filter(_Entry.id==id)
+        q = t.query(_Entry).filter(_Entry.id == id)
         if not system:
             q = q.filter(
                 (_Entry.user_id == current_user_id()) | (_Entry.access >= _Entry.Access.common)
