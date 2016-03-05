@@ -1,13 +1,22 @@
-import logging
+import bottle
+import random
+
+from sqlalchemy import Column, String, Integer, ForeignKey
+from sqlalchemy.orm import relationship
+from sqlalchemy.orm.exc import NoResultFound
+from samtt import Base, get_db
+from .web import (
+    Create,
+    Fetch,
+    FetchById,
+    DeleteById,
+)
+from .user import authenticate, no_guests
+from .types import PropertySet, Property
 
 
 # DB MODEL
 ##########
-
-from enum import IntEnum
-from sqlalchemy import Column, String, Integer, ForeignKey
-from sqlalchemy.orm import relationship
-from samtt import Base
 
 
 class _Tag(Base):
@@ -30,10 +39,8 @@ class _EntryToTag(Base):
 # DESCRIPTOR
 ############
 
-from .types import PropertySet, Property
 
-
-class Tag(PropertySet):   
+class Tag(PropertySet):
     id = Property()
     color_id = Property(int)
     background_color = Property()
@@ -49,19 +56,10 @@ class TagFeed(PropertySet):
 # WEB
 #####
 
-import bottle
-from .web import (
-    Create,
-    Fetch,
-    FetchById,
-    DeleteById,
-)
-from .user import authenticate, no_guests
-
 
 class App:
     BASE = '/tag'
-    
+
     @classmethod
     def create(self):
         app = bottle.Bottle()
@@ -94,10 +92,6 @@ class App:
 # API
 #####
 
-import random
-from sqlalchemy.orm.exc import NoResultFound
-from samtt import get_db
-
 
 def get_tags():
     with get_db().transaction() as t:
@@ -119,7 +113,7 @@ def get_tags():
 
 def get_tag_by_id(id):
     with get_db().transaction() as t:
-        tag = t.query(_Tag).filter(_Tag.id==id).one()
+        tag = t.query(_Tag).filter(_Tag.id == id).one()
 
         return Tag(
             id=tag.id,
@@ -132,7 +126,7 @@ def get_tag_by_id(id):
 
 def delete_tag_by_id(id):
     with get_db().transaction() as t:
-        t.query(_Tag).filter(_Tag.id==id).delete()
+        t.query(_Tag).filter(_Tag.id == id).delete()
 
 
 def add_tag(td):
@@ -311,4 +305,3 @@ colors = [
     ('#FFFFF0', '#4169E1', 'Ivory'),
     ('#FFFFFF', '#000000', 'White'),
 ]
-
