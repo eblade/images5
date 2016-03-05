@@ -6,6 +6,7 @@ Built for the cloud.
 
 Requirements:
 
+* python>=3.5
 * pillow
 * sqlalchemy
 * bottle
