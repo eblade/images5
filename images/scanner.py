@@ -1,27 +1,22 @@
-import os, logging
+import os
+import logging
+import bottle
 
-from .location import get_locations_by_type, SCANNABLE, Location
+from threading import Thread, Event
+
+from .location import get_locations_by_type, SCANNABLE
 from .file import _File, File, create_file
 from .entry import _Entry, Entry, create_entry
+from .user import authenticate, require_admin, no_guests
 
 
 # WEB
 #####
 
-import bottle
-from .web import (
-    Create,
-    Fetch,
-    FetchByKey,
-    FetchById,
-    FetchByQuery,
-)
-from .user import authenticate, require_admin, no_guests
-
 
 class App:
     BASE = '/scanner'
-    
+
     @classmethod
     def create(self):
         app = bottle.Bottle()
@@ -92,8 +87,6 @@ class FolderScanner(object):
 # SCANNER MANAGER
 #################
 
-from threading import Thread, Event
-
 
 class Manager:
     """
@@ -124,7 +117,7 @@ class Manager:
             raise ValueError("No thread for location %i", location_id)
         logging.info("Triggering scanner event for location %i", location_id)
         event.set()
-                
+
 
 def scanning_loop(scan_event, location):
     """
