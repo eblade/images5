@@ -1,7 +1,9 @@
 """Helper classes for dealing with local file operations."""
 
 
-import os, errno, logging
+import os
+import errno
+import logging
 
 
 ################################################################################
@@ -21,7 +23,7 @@ class FileCopy(object):
         link (Optional[boo]): Try hard-linking before copying. Defaults to `False`.
         keep_original (Optional[bool]): Keep source file, as opposed to deleting it when done.
             Defaults to whatever the source `Location.metadata.keep_original` is.
-        dest_folder (str): Relative destination folder. 
+        dest_folder (str): Relative destination folder.
             If not given, let destionation `Location` decide.
 
     Attributes:
@@ -70,7 +72,6 @@ class FileCopy(object):
         while True:
             try:
                 if c:
-                    postfix = '%i_' % c
                     dst_path, dst_ext = os.path.splitext(dst)
                     fixed_dst = ''.join([dst_path, '_%i' % c, dst_ext])
                 else:
@@ -97,7 +98,6 @@ class FileCopy(object):
                 else:
                     logging.warning("OSError %i %s -> %s (%s)", e.errno, src, fixed_dst, str(e))
                     raise e
-                    
 
         if not self.keep_original:
             logging.debug("Removing original %s", src)
