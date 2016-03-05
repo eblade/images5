@@ -1,12 +1,12 @@
-
-
-import logging, json
+import logging
+import json
 
 
 metadata_schemas = {}
 
 
 def register_metadata_schema(metadata_class):
+    logging.info("Registered metadata schema %s", metadata_class.__name__)
     metadata_schemas[metadata_class.__name__] = metadata_class
 
 
