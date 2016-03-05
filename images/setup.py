@@ -1,5 +1,3 @@
-import sys
-import os
 import logging
 import configparser
 
@@ -7,6 +5,7 @@ from samtt import init
 from .location import _Location
 from .user import _User, password_hash
 from .location import get_location_by_name, update_location_by_id
+
 
 class Setup:
     def __init__(self, config_path, debug=False):
@@ -46,8 +45,8 @@ class Setup:
         with self.db.transaction() as t:
             for username, data in self.config['User'].items():
                 logging.debug("There should be a user '%s'.", username)
-                
-                if t.query(_User).filter(_User.name==username).count() > 0:
+
+                if t.query(_User).filter(_User.name == username).count() > 0:
                     logging.debug("User '%s' exists, skipping.", username)
                     continue
 
@@ -87,7 +86,7 @@ class Setup:
                         b.strip() for b in location_data['tags'].split(',') if b
                     ]
 
-                if t.query(_Location).filter(_Location.name==name).count() > 0:
+                if t.query(_Location).filter(_Location.name == name).count() > 0:
                     logging.debug("Location '%s' exists, updating.", name)
                     location = get_location_by_name(name)
                     location.metadata = _Location.DefaultLocationMetadata(location_data)
@@ -96,14 +95,13 @@ class Setup:
                     logging.info("Updated location '%s'.", name)
                 else:
                     metadata = _Location.DefaultLocationMetadata(location_data)
-                    metadata.folder = path
-                
+
                     location = _Location(
                         name=name,
                         type=location_data.get('type', name),
                         data=metadata.to_json(),
                     )
-                    
+
                     t.add(location)
                     logging.info("Added location '%s'.", name)
         logging.info("Done with locations.")
