@@ -3,6 +3,37 @@ import bottle
 import requests
 import enum
 import time
+import queue
+
+
+class ChannelError(bottle.HTTPError):
+    def __init__(self, channel_name):
+        super(ChanelError, self).__init__(400, 'Channel Error for "%s"' % channel_name)
+
+
+class InvalidSecret(bottle.HTTPError):
+    def __init__(self):
+        super(InvalidSecret, self).__init__(401, 'Invalid Secret')
+
+
+class InvalidToken(bottle.HTTPError):
+    def __init__(self):
+        super(InvalidToken, self).__init__(401, 'Invalid Token')
+
+
+class MissingKey(bottle.HTTPError):
+    def __init__(self, key):
+        super(MissingKey, self).__init__(404, 'Missing Key "%s"' % key)
+
+
+class KeyConflict(bottle.HTTPError):
+    def __init__(self, key):
+        super(KeyConflict, self).__init__(409, 'Key Conflict "%s"' % key)
+
+
+class BadSubscriptionType(bottle.HTTPError):
+    def __init__(self, type):
+        super(BadSubscriptionType, self).__init__(400, 'Bad Subscription Type "%s"' % str(type))
 
 
 class Channel(object):
@@ -10,33 +41,116 @@ class Channel(object):
         self.name = name
         self.lock = threading.Lock()
         self.messages = {}
-        self.queue = threading.Queue()
+        self.queue = queue.Queue()
         self.subscriptions = {}
+        self._cached_has_replicators = None
+
+    def to_string(self):
+        result = 'Channel=%s\n' % self.name
+        try:
+            self.lock.acquire()
+            for versions in self.messages.values():
+                result += 'C:' + str(versions.current) + '\n'
+                result += 'P:' + str(versions.pending) + '\n'
+        finally:
+            self.lock.release()
+        return result
+
+    def has_replicators(self):
+        if self._cached_has_replicators is not None:
+            return self._cached_has_replicators
+        else:
+            for subscription in self.subscriptions.values():
+                if subscription.type == SubscriptionType.replication:
+                    self._cached_has_replicators = True
+                    return True
+            self._cached_has_replicators = False
+            return False
 
     def get(self, key):
         assert key
 
         try:
             versions = self.messages[key]
+            if versions.current is None:
+                raise MissingKey(key)
             return versions.current
         except KeyError:
-            raise KeyError("Key '%s' does not exist." % key)
+            raise MissingKey(key)
 
     def create(self, message):
         assert message.key
         assert message.version == 1
 
+        message.status = MessageStatus.ok
         try:
             self.lock.acquire()
-            if message.key in self.messages.keys():
-                raise KeyError("Key '%s' already exists." % message.key)
-            versions = MessageVersions()
+            try:
+                versions = self.messages[message.key]
+            except KeyError:
+                versions = MessageVersions()
+            if versions.current is not None:
+                raise KeyConflict(message.key)
+            if versions.pending is not None:
+                raise KeyConflict(message.key)
+
             versions.current = message
             self.messages[message.key] = versions
         finally:
             self.lock.release()
 
+    def update(self, message):
+        assert message.key
+        assert message.version
+        assert message.status == MessageStatus.pending
+
+        try:
+            self.lock.acquire()
+            try:
+                versions = self.messages[message.key]
+                if versions.current is None:
+                    raise MissingKey(message.key)
+                message.version = versions.current.version + 1
+                if self.has_replicators():
+                    versions.pending = message
+                else:
+                    message.status == MessageStatus.ok
+                    versions.current = message
+            except KeyError:
+                raise MissingKey(message.key)
+        finally:
+            self.lock.release()
+
+    def delete(self, message):
+        assert message.key
+        assert message.version
+        assert message.headers
+
+        deleted = message.headers['Deleted']
+        deleted_by = message.headers['Deleted-By']
+
+        try:
+            self.lock.acquire()
+            try:
+                versions = self.messages[message.key]
+
+                if versions.current is None:
+                    raise MissingKey(message.key)
+
+                if versions.current.version != message.version:
+                    raise InactiveVersion(message.key, message.version)
+
+                versions.current.headers['Deleted'] = deleted
+                versions.current.headers['Deleted-By'] = deleted_by
+                versions.deleted = versions.current
+                versions.current = None
+            except KeyError:
+                raise MissingKey(message.key)
+        finally:
+            self.lock.release()
+
     def subscribe(self, type, url):
+        self._cached_has_replicators = None
         try:
             self.lock.acquire()
             self.subscriptions[url].type = type
@@ -46,6 +160,7 @@ class Channel(object):
             self.lock.release()
 
     def unsubscribe(self, url):
+        self._cached_has_replicators = None
         try:
             self.lock.acquire()
             del self.subscriptions[url]
@@ -69,11 +184,15 @@ class Message(object):
         self.status = MessageStatus.pending
         self.headers = dict(headers)
 
+    def __str__(self):
+        return '<Message %s/%i "%s">' % (self.key, self.version, str(self.data, 'utf8'))
+
 
 class MessageVersions(object):
     def __init__(self):
         self.current = None
         self.pending = None
+        self.deleted = None
 
 
 class SubscriptionType(enum.IntEnum):
@@ -89,32 +208,45 @@ class Subscription(object):
         self.url = url
 
 
+class NodeType(enum.IntEnum):
+    client = 1
+    server = 2
+
+
+class Node(object):
+    def __init__(self, address, token, secret, type=NodeType.client):
+        self.address = address  # really needed?
+        self.token = token
+        self.secret = secret
+
+
 class DBMQ(object):
     def __init__(self):
         self.channels = {}
-        self.client_tokens = set()
+        self.nodes = {}
         self.lock = threading.Lock()
 
-    def get(self, channel, key):
-        assert cilent_token in self.client_token
-        assert channel_name
-        assert key
-        
+    def add_node(self, node):
+        assert node.token
+        assert node.address
         try:
             self.lock.acquire()
-            channel = self.channels[channel_name]
-            return channel.get(key)
-        except KeyError:
-            raise KeyError("Bad channel '%s'." % str(channel_name))
+            self.nodes[node.token] = node
         finally:
             self.lock.release()
 
-    def create(self, client_token, channel_name, key, headers, data):
-        assert client_token in self.client_tokens
-        assert channel_name
-        assert key
+    def authenticate(self, node_token, node_secret):
+        assert node_token
+        assert node_secret
+        node = self.nodes.get(node_token)
 
-        now = time.now()
+        if node is None:
+            raise InvalidToken
+
+        if node_secret != node.secret:
+            raise InvalidSecret
+
+    def get_channel(self, channel_name):
         channel = None
         
         try:
@@ -127,18 +259,69 @@ class DBMQ(object):
             self.lock.release()
 
         if channel is None:
-            raise KeyError("Bad channel '%s'." % str(channel_name))
+            raise ChannelError(channel_name)
 
-        headers['Created-By'] = client_token
+        return channel
+
+    def get(self, node_token, node_secret, channel_name, key, headers):
+        self.authenticate(node_token, node_secret)
+        assert channel_name
+        assert key
+        
+        return self.get_channel(channel_name).get(key)
+
+    def create(self, node_token, node_secret, channel_name, key, headers, data):
+        self.authenticate(node_token, node_secret)
+        assert channel_name
+        assert key
+
+        now = time.time()
+        channel = self.get_channel(channel_name)
+
+        headers['Created-By'] = node_token
         headers['Created'] = now
-        headers['Modified-By'] = client_token
+        headers['Modified-By'] = node_token
         headers['Modified'] = now
         message = Message(key, data, headers)
         channel.create(message)
+        print(channel.to_string())
 
-    def subscribe(self, channel_name, type, url):
+    def update(self, node_token, node_secret, channel_name, key, headers, data):
+        self.authenticate(node_token, node_secret)
         assert channel_name
-        type = getattr(SubscriptionType, type)
+        assert key
+
+        now = time.time()
+        channel = self.get_channel(channel_name)
+
+        headers['Modified-By'] = node_token
+        headers['Modified'] = now
+        message = Message(key, data, headers)
+        channel.update(message)
+        print(channel.to_string())
+
+    def delete(self, node_token, node_secret, channel_name, key, headers):
+        self.authenticate(node_token, node_secret)
+        assert channel_name
+        assert key
+
+        now = time.time()
+        channel = self.get_channel(channel_name)
+
+        headers['Deleted-By'] = node_token
+        headers['Deleted'] = now
+        message = Message(key, None, headers)
+        channel.delete(message)
+
+    def subscribe(self, node_token, node_secret, channel_name, type, url):
+        self.authenticate(node_token, node_secret)
+        assert channel_name
+        try :
+            type = getattr(SubscriptionType, type)
+        except AttributeError:
+            raise BadSubscriptionType(type)
+        except TypeError:
+            raise BadSubscriptionType(type)
         assert url
 
         channel = None
@@ -157,7 +340,8 @@ class DBMQ(object):
 
         channel.subscribe(type, url)
 
-    def unsubscribe(self, channel_name, url):
+    def unsubscribe(self, node_token, node_secret, channel_name, url):
+        self.authenticate(node_token, node_secret)
         assert channel_name
         assert url
 
@@ -174,42 +358,64 @@ if __name__ == '__main__':
     dbmq = DBMQ()
     http = bottle.Bottle()
     
-    dbmq.client_tokens.add('A')
-    dbmq.client_tokens.add('B')
-    dbmq.client_tokens.add('C')
+    dbmq.add_node(Node('http://localhost:8080/', 'A', 'As')) # me
+    dbmq.add_node(Node('http://localhost:8081/', 'a', 'as'))
+    dbmq.add_node(Node('http://localhost:8082/', 'b', 'bs'))
+    dbmq.add_node(Node('http://localhost:8083/', 'c', 'cs'))
+
+    @http.route('/', 'HEAD')
+    def check():
+        raise bottle.HTTPResponse(status=204)
 
     @http.get('/<channel>/<key>')
     def get(channel, key):
-        client_token = bottle.headers.pop('Client-Token')
-        dbmq.get(client_token, channel, key, headers, bottle.request.body.read())
+        node_token = bottle.request.headers.get('Client-Token')
+        node_secret = bottle.request.headers.get('Client-Secret')
+        headers = {k: v for k, v in bottle.request.headers.items() if k.startswith('X-')}
+        message = dbmq.get(node_token, node_secret, channel, key, headers)
+        raise bottle.HTTPResponse(message.data, 200, dict(message.headers))
 
     @http.post('/<channel>/<key>')
     def create(channel, key):
-        client_token = bottle.headers.pop('Client-Token')
-        headers = {k: v for k, v in bottle.headers.items() if k.startswith('X-')}
-        dbmq.create(client_token, channel, key, headers, bottle.request.body.read())
+        node_token = bottle.request.headers.get('Client-Token')
+        node_secret = bottle.request.headers.get('Client-Secret')
+        headers = {k: v for k, v in bottle.request.headers.items() if k.startswith('X-')}
+        dbmq.create(node_token, node_secret, channel, key, headers, bottle.request.body.read())
+        raise bottle.HTTPResponse(status=201)
 
     @http.put('/<channel>/<key>')
     def update(channel, key):
-        client_token = bottle.headers.pop('Client-Token')
-        source_version = bottle.headers.pop('Source-Version')
-        headers = {k: v for k, v in bottle.headers.items() if k.startswith('X-')}
-        dbmq.update(client_token, channel, key, headers, bottle.request.body.read())
+        node_token = bottle.request.headers.get('Client-Token')
+        node_secret = bottle.request.headers.get('Client-Secret')
+        source_version = bottle.request.headers.get('Source-Version')
+        headers = {k: v for k, v in bottle.request.headers.items() if k.startswith('X-')}
+        dbmq.update(node_token, node_secret, channel, key, headers, bottle.request.body.read())
+        raise bottle.HTTPResponse(status=202)
 
     @http.delete('/<channel>/<key>')
     def delete(channel, key):
-        client_token = bottle.headers.pop('Client-Token')
-        source_version = bottle.headers.pop('Source-Version')
-        headers = {k: v for k, v in bottle.headers.items() if k.startswith('X-')}
-        dbmq.delete(client_token, channel, key, headers, bottle.request.body.read())
+        node_token = bottle.request.headers.get('Client-Token')
+        node_secret = bottle.request.headers.get('Client-Secret')
+        source_version = bottle.request.headers.get('Source-Version')
+        headers = {k: v for k, v in bottle.request.headers.items() if k.startswith('X-')}
+        dbmq.delete(node_token, node_secret, channel, key, headers)
+        raise bottle.HTTPResponse(status=204)
 
     @http.get('/<channel>')
     def subscribe(channel):
-        dbmq.subscribe(channel, bottle.request.query.get('type'), bottle.request.query.get('url'))
+        node_token = bottle.request.headers.get('Client-Token')
+        node_secret = bottle.request.headers.get('Client-Secret')
+        subscription_type = bottle.request.headers.get('Subscription-Type')
+        hook_url = bottle.request.headers.get('Hook')
+        dbmq.subscribe(node_token, node_secret, channel, subscription_type, hook_url)
 
     @http.delete('/<channel>')
     def unsubscribe(channel):
-        dbmq.unsubscribe(channel, bottle.request.query.get('url'))
+        node_token = bottle.request.headers.get('Client-Token')
+        node_secret = bottle.request.headers.get('Client-Secret')
+        subscription_type = bottle.request.headers.get('Subscription-Type')
+        hook_url = bottle.request.headers.pop('Hook')
+        dbmq.unsubscribe(node_token, node_secret, channel)
 
     bottle.debug(True)
-    http.run()
+    http.run(port=8080)

@@ -1,0 +1,5 @@
+Test run sön 24 apr 2016 23:35:04 BST, filter was 'subscribe'
+
+PASS test-subscribe.sh
+
+Ran 1 tests. 1 passed, 0 failed and 8 were skipped.
