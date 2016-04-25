@@ -1,5 +1,6 @@
 #/bin/bash
 
+export DESCRIPTION="Creating a message with same key as a deleted message should be possible."
 export FIXTURE="single"
 
 run() {

@@ -4,6 +4,7 @@ import requests
 import enum
 import time
 import queue
+import json
 
 
 class ChannelError(bottle.HTTPError):
@@ -149,21 +150,21 @@ class Channel(object):
         finally:
             self.lock.release()
 
-    def subscribe(self, type, url):
+    def subscribe(self, node_token, type, url):
         self._cached_has_replicators = None
         try:
             self.lock.acquire()
-            self.subscriptions[url].type = type
+            self.subscriptions[node_token].type = type
         except KeyError:
-            self.subscriptions[url] = Subscription(self.name, type, url)
+            self.subscriptions[node_token] = Subscription(self.name, node_token, type, url)
         finally:
             self.lock.release()
 
-    def unsubscribe(self, url):
+    def unsubscribe(self, node_token):
         self._cached_has_replicators = None
         try:
             self.lock.acquire()
-            del self.subscriptions[url]
+            del self.subscriptions[node_token]
         except KeyError:
             pass
         finally:
@@ -202,10 +203,19 @@ class SubscriptionType(enum.IntEnum):
 
 
 class Subscription(object):
-    def __init__(self, channel, type, url):
+    def __init__(self, channel, node_token, type, url):
         self.channel = channel
+        self.node_token = node_token
         self.type = SubscriptionType(type)
         self.url = url
+    
+    def to_dict(self):
+        return {
+            'channel': self.channel,
+            'token': self.node_token,
+            'type': self.type.name,
+            'url': self.url,
+        }
 
 
 class NodeType(enum.IntEnum):
@@ -338,18 +348,29 @@ class DBMQ(object):
         if channel is None:
             raise KeyError("Bad channel '%s'." % str(channel_name))
 
-        channel.subscribe(type, url)
+        channel.subscribe(node_token, type, url)
 
-    def unsubscribe(self, node_token, node_secret, channel_name, url):
+    def unsubscribe(self, node_token, node_secret, channel_name):
         self.authenticate(node_token, node_secret)
         assert channel_name
-        assert url
 
         try:
             self.lock.acquire()
-            self.channels[channel_name].unsubscribe(url)
+            self.channels[channel_name].unsubscribe(node_token)
         except KeyError:
             pass
+        finally:
+            self.lock.release()
+
+    def get_subscriptions(self, node_token, node_secret, channel_name):
+        self.authenticate(node_token, node_secret)
+        assert channel_name
+
+        try:
+            self.lock.acquire()
+            return self.channels[channel_name].subscriptions
+        except KeyError:
+            raise ChannelError(channel_name)
         finally:
             self.lock.release()
 
@@ -401,21 +422,29 @@ if __name__ == '__main__':
         dbmq.delete(node_token, node_secret, channel, key, headers)
         raise bottle.HTTPResponse(status=204)
 
-    @http.get('/<channel>')
+    @http.post('/<channel>')
     def subscribe(channel):
         node_token = bottle.request.headers.get('Client-Token')
         node_secret = bottle.request.headers.get('Client-Secret')
         subscription_type = bottle.request.headers.get('Subscription-Type')
         hook_url = bottle.request.headers.get('Hook')
         dbmq.subscribe(node_token, node_secret, channel, subscription_type, hook_url)
+        raise bottle.HTTPResponse(status=201)
 
     @http.delete('/<channel>')
     def unsubscribe(channel):
         node_token = bottle.request.headers.get('Client-Token')
         node_secret = bottle.request.headers.get('Client-Secret')
-        subscription_type = bottle.request.headers.get('Subscription-Type')
-        hook_url = bottle.request.headers.pop('Hook')
+        hook_url = bottle.request.headers.get('Hook')
         dbmq.unsubscribe(node_token, node_secret, channel)
+        raise bottle.HTTPResponse(status=204)
+
+    @http.get('/<channel>')
+    def list_subscriptions(channel):
+        node_token = bottle.request.headers.get('Client-Token')
+        node_secret = bottle.request.headers.get('Client-Secret')
+        data = dbmq.get_subscriptions(node_token, node_secret, channel)
+        raise bottle.HTTPResponse(body=json.dumps(data, indent=2, sort_keys=True, default=lambda x: x.to_dict()), status=200)
 
     bottle.debug(True)
     http.run(port=8080)

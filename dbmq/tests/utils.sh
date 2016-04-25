@@ -5,11 +5,15 @@ log() {
     local MESSAGE="$2"
     local STATUS="${3-}"
 
-    KWSIZE=$((10-${#KEYWORD}))
+    KWSIZE=$((15-${#KEYWORD}))
     KWPAD=$(printf "%${KWSIZE}s" " ")
 
     if [ "$KEYWORD" == "ASSERT" ]; then
         KEYWORD="\e[35m$KEYWORD"
+    elif [ "$KEYWORD" == "DESCRIPTION" ]; then
+        KEYWORD="\e[34m$KEYWORD"
+    elif [ "$KEYWORD" == "TEST" ]; then
+        KEYWORD="\e[34m$KEYWORD"
     fi
 
     if [ "$STATUS" == "OK" ]; then
@@ -26,22 +30,36 @@ log() {
 }
 
 assert_equal() {
-  E_PARAM_ERR=98
-  E_ASSERT_FAILED=99
+    local E_PARAM_ERR=98
+    local E_ASSERT_FAILED=99
 
-  if [ -z ${3-} ]; then
-      log ASSERT " $0 :: Missing LINENO" WARNING
-      return $E_PARAM_ERR
-  fi
+    if [ -z ${3-} ]; then
+        log ASSERT " $0 :: Missing LINENO" WARNING
+        return $E_PARAM_ERR
+    fi
 
-  lineno=$3
+    lineno=$3
 
-  if [ "$1" != "$2" ]; then
-    log ASSERT " $0 +$lineno :: Assertion failed:  \"$1\" == \"$2\"" FAILED
+    if [ "$1" != "$2" ]; then
+        log ASSERT "$0 +$lineno :: Assertion failed:  \"$1\" == \"$2\"" FAILED
+        exit $E_ASSERT_FAILED
+    else
+        log ASSERT "$1 == $2" OK
+    fi  
+}
+
+fail() {
+    local E_ASSERT_FAILED=99
+
+    if [ -z ${2-} ]; then
+        log ASSERT " $0 :: Missing LINENO" WARNING
+        return $E_PARAM_ERR
+    fi
+
+    lineno=$2
+
+    log FAIL " $0 +$lineno :: $1" FAILED
     exit $E_ASSERT_FAILED
-  else
-    log ASSERT "$1 == $2" OK
-  fi  
 }
 
 check() {
@@ -152,7 +170,7 @@ subscribe() {
     HTTP_STATUS=$(curl \
         --silent \
         -w "%{http_code}" -o >(cat >&3) \
-        -X GET \
+        -X POST \
         --header "Client-Token: $TOKEN" \
         --header "Client-Secret: $SECRET" \
         --header "Subscription-Type: $TYPE" \
@@ -161,3 +179,36 @@ subscribe() {
     )
 }
 
+unsubscribe() {
+    local CHANNEL=$1
+
+    log UNSUBSCRIBE "$CHANNEL"
+
+    exec 3>&1
+
+    HTTP_STATUS=$(curl \
+        --silent \
+        -w "%{http_code}" -o >(cat >&3) \
+        -X DELETE \
+        --header "Client-Token: $TOKEN" \
+        --header "Client-Secret: $SECRET" \
+        "$SERVER:$PORT/$CHANNEL"
+    )
+}
+
+subscriptions() {
+    local CHANNEL=$1
+
+    log SUBSCRIPTIONS "$CHANNEL"
+
+    exec 3>&1
+
+    HTTP_STATUS=$(curl \
+        --silent \
+        -w "%{http_code}" -o >(cat >&3) \
+        -X GET \
+        --header "Client-Token: $TOKEN" \
+        --header "Client-Secret: $SECRET" \
+        "$SERVER:$PORT/$CHANNEL"
+    )
+}

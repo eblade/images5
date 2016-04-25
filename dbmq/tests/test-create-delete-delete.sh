@@ -1,5 +1,6 @@
 #/bin/bash
 
+export DESCRIPTION="Deleting a deleted message should retuen 404 Not Found."
 export FIXTURE="single"
 
 run() {

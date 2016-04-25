@@ -6,8 +6,12 @@ TEST="$1"
 
 source "utils.sh"
 
-FIXTURE=""
+FIXTURE=
+DESCRIPTION=
 source "$TEST"
+
+log TEST "$TEST"
+log DESCRIPTION "$DESCRIPTION"
 
 if [ -n "$FIXTURE" ]; then
     FIXTURE="fixture-${FIXTURE}.sh"
@@ -19,8 +23,8 @@ if [ -n "$FIXTURE" ]; then
     trap teardown-fixture EXIT
 fi
 
-log RUN "Running test ${TEST}..."
+log TEST "Running test ${TEST}..."
 run
-log RUN "Done with test ${TEST}." OK
+log TEST "Done with test ${TEST}." OK
 
 exit 0

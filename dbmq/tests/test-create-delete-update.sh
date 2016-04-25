@@ -1,5 +1,6 @@
 #/bin/bash
 
+export DESCRIPTION="Update message should not be possible after deletion."
 export FIXTURE="single"
 
 run() {

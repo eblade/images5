@@ -1,5 +1,6 @@
 #/bin/bash
 
+export DESCRIPTION="Deletion should return 204 No Content."
 export FIXTURE="single"
 
 run() {

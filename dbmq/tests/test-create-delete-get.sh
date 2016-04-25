@@ -1,5 +1,6 @@
 #/bin/bash
 
+export DESCRIPTION="Getting a message after deleting it should return 404 Not Found."
 export FIXTURE="single"
 
 run() {
@@ -16,6 +17,6 @@ run() {
     get "$CHANNEL" "$KEY"
     assert_equal "$HTTP_STATUS" 404 $LINENO
 
-    # The deletion should result in a 204 No Content
+    # The deletion should result in a 404 Not Found
 }
 

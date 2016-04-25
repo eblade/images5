@@ -1,5 +1,6 @@
 #/bin/bash
 
+export DESCRIPTION="Create and get should return what was created."
 export FIXTURE="single"
 
 run() {

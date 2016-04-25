@@ -1,5 +1,6 @@
 #/bin/bash
 
+export DESCRIPTION="Create message, get, update and get should return the latest version on a single-node setup."
 export FIXTURE="single"
 
 run() {

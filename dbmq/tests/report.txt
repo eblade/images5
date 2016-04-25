@@ -1,5 +1,13 @@
-Test run sön 24 apr 2016 23:35:04 BST, filter was 'subscribe'
+Test run mån 25 apr 2016 22:17:54 BST, filter was ''
 
+PASS test-create-delete-create.sh
+PASS test-create-delete-delete.sh
+PASS test-create-delete-get.sh
+PASS test-create-delete.sh
+PASS test-create-delete-update.sh
+PASS test-create-get.sh
+PASS test-create-get-update-get-newest.sh
+PASS test-create-update-get.sh
 PASS test-subscribe.sh
 
-Ran 1 tests. 1 passed, 0 failed and 8 were skipped.
+Ran 9 tests. 9 passed, 0 failed and 0 were skipped.
