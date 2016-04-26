@@ -9,10 +9,11 @@ setup-fixture() {
     HERE="$(pwd)"
     cd "../.."
     python dbmq &
-    FIXTURE_PID=$!
+    local PID=$!
+    KILLME="$KILLME $PID"
     cd "$HERE"
-    if [ -e "/proc/$FIXTURE_PID" ]; then
-        log FIXTURE "Fixture started ok (PID=$FIXTURE_PID)." OK
+    if [ -e "/proc/$PID" ]; then
+        log FIXTURE "Fixture started ok (PID=$PID)." OK
     else
         log FIXTURE "Fixture crashed. Exiting." FAILED
         exit 97
@@ -27,12 +28,5 @@ setup-fixture() {
         fi
     done
     log FIXTURE "Fixture does not respond." FAILED
-    teardown-fixture
-
-}
-
-teardown-fixture() {
-    log FIXTURE "Tearing down fixture (PID=$FIXTURE_PID)."
-    kill "$FIXTURE_PID"
-    log FIXTURE "Tore down fixture." OK
+    kill $PID
 }

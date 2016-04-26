@@ -14,7 +14,7 @@ run() {
 
     # Subscribing with TOKEN1
     subscribe "$CHANNEL" topic "$URL1"
-    assert_equal "$HTTP_STATUS" 201 $LINENO
+    assert equal "$HTTP_STATUS" 201 $LINENO
 
     JSON=$(subscriptions "$CHANNEL")
     log JSON "$JSON"
@@ -31,7 +31,7 @@ run() {
     SECRET="$SECRET2"
     
     subscribe "$CHANNEL" topic "$URL2"
-    assert_equal "$HTTP_STATUS" 201 $LINENO
+    assert equal "$HTTP_STATUS" 201 $LINENO
 
     JSON=$(subscriptions "$CHANNEL")
     log JSON "$JSON"
@@ -48,7 +48,7 @@ run() {
 
     # Unsubscribe with TOKEN2
     unsubscribe "$CHANNEL"
-    assert_equal "$HTTP_STATUS" 204 $LINENO
+    assert equal "$HTTP_STATUS" 204 $LINENO
 
     JSON=$(subscriptions "$CHANNEL")
     log JSON "$JSON"
@@ -65,7 +65,7 @@ run() {
     SECRET="$SECRET1"
 
     unsubscribe "$CHANNEL"
-    assert_equal "$HTTP_STATUS" 204 $LINENO
+    assert equal "$HTTP_STATUS" 204 $LINENO
 
     JSON=$(subscriptions "$CHANNEL")
     log JSON "$JSON"

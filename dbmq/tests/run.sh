@@ -8,6 +8,7 @@ source "utils.sh"
 
 FIXTURE=
 DESCRIPTION=
+KILLME=""
 source "$TEST"
 
 log TEST "$TEST"
@@ -20,11 +21,18 @@ if [ -n "$FIXTURE" ]; then
     log FIXTURE "Setting up fixture ${FIXTURE}..."
     setup-fixture
     log FIXTURE "Done setting up fixture ${FIXTURE}." OK
-    trap teardown-fixture EXIT
 fi
 
+teardown() {
+    log TEARDOWN "Tearing down [$KILLME ]."
+    kill $KILLME
+    log TEARDOWN "Tore down." OK
+}
+
+trap teardown EXIT
+
 log TEST "Running test ${TEST}..."
-run
+PATH=".:$PATH" run
 log TEST "Done with test ${TEST}." OK
 
 exit 0

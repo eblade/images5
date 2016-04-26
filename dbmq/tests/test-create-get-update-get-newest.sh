@@ -10,13 +10,13 @@ run() {
     local UPDATED="data2"
 
     create "$CHANNEL" "$KEY" "$ORIGINAL"
-    assert_equal "$HTTP_STATUS" 201 $LINENO
+    assert equal "$HTTP_STATUS" 201 $LINENO
 
     BACK=$(get "$CHANNEL" "$KEY")
-    assert_equal "$BACK" "$ORIGINAL" $LINENO
+    assert equal "$BACK" "$ORIGINAL" $LINENO
 
     update "$CHANNEL" "$KEY" 1 "$UPDATED"
-    assert_equal "$HTTP_STATUS" 202 $LINENO
+    assert equal "$HTTP_STATUS" 202 $LINENO
 
     # The update is never syncronouos and should return 202 Accepted
 
@@ -29,5 +29,5 @@ run() {
         fi
         sleep 0.1
     done
-    assert_equal "$BACK" "$UPDATED" $LINENO
+    assert equal "$BACK" "$UPDATED" $LINENO
 }

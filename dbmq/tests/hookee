@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+
+import sys
+import json
+import http.server
+from urllib.parse import urlparse
+
+url, data, filename = sys.argv[1:]
+url = urlparse(url)
+
+
+class HookHandler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers['Content-Length'])
+        body = self.rfile.read(length).decode('utf-8')
+
+        with open(filename, 'wb') as f:
+            s = json.dumps({
+                'headers': {k: v for k, v in self.headers.items()},
+                'body': body
+            }, indent=2, sort_keys=True)
+            f.write(s.encode('utf8'))
+
+        if self.path != url.path:
+            self.send_response(404, 'Not Found')
+        elif body != data:
+            self.send_response(400, 'Bad Request')
+        else:
+            self.send_response(200, 'OK')
+
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+        self.wfile.write(b'')
+
+
+server_address = ('127.0.0.1', url.port)
+httpd = http.server.HTTPServer(server_address, HookHandler)
+
+try:
+    httpd.serve_forever()
+except KeyboardInterrupt:
+    pass

@@ -10,12 +10,12 @@ run() {
     local NEWDATA="data2"
 
     create "$CHANNEL" "$KEY" "$ORIGINAL"
-    assert_equal "$HTTP_STATUS" 201 $LINENO
+    assert equal "$HTTP_STATUS" 201 $LINENO
 
     delete "$CHANNEL" "$KEY" "1"
-    assert_equal "$HTTP_STATUS" 204 $LINENO
+    assert equal "$HTTP_STATUS" 204 $LINENO
 
     update "$CHANNEL" "$KEY" "1" "$NEWDATA"
-    assert_equal "$HTTP_STATUS" 404 $LINENO
+    assert equal "$HTTP_STATUS" 404 $LINENO
 }
 

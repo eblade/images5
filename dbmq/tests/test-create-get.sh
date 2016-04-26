@@ -9,9 +9,9 @@ run() {
     local ORIGINAL="data"
 
     create "$CHANNEL" "$KEY" "$ORIGINAL"
-    assert_equal "$HTTP_STATUS" 201 $LINENO
+    assert equal "$HTTP_STATUS" 201 $LINENO
 
     local BACK=$(get "$CHANNEL" "$KEY")
-    assert_equal "$BACK" "$ORIGINAL" $LINENO
+    assert equal "$BACK" "$ORIGINAL" $LINENO
 }
 

@@ -20,32 +20,41 @@ log() {
         STATUS="\e[32m$STATUS"
     elif [ "$STATUS" == "FAILED" ]; then
         STATUS="\e[31m$STATUS"
+    elif [ "$STATUS" == "ERROR" ]; then
+        STATUS="\e[31m$STATUS"
     fi
 
     if [ -n "$STATUS" ]; then
         STATUS="[\e[1m$STATUS\e[0m] "
     fi
 
-    (>&2 echo -e "\e[0m:: \e[1m$KEYWORD$KWPAD \e[0m:: $STATUS$MESSAGE\e[0m")
+    (>&2 echo -e "\e[0m:: \e[1m$KWPAD$KEYWORD \e[0m:: $STATUS$MESSAGE\e[0m")
 }
 
-assert_equal() {
+assert() {
+    local WHAT="$1"
     local E_PARAM_ERR=98
     local E_ASSERT_FAILED=99
 
-    if [ -z ${3-} ]; then
-        log ASSERT " $0 :: Missing LINENO" WARNING
-        return $E_PARAM_ERR
+    if [ -z ${4-} ]; then
+        log ASSERT " $0 :: Missing LINENO" ERROR
+        exit $E_PARAM_ERR
     fi
 
     lineno=$3
 
-    if [ "$1" != "$2" ]; then
-        log ASSERT "$0 +$lineno :: Assertion failed:  \"$1\" == \"$2\"" FAILED
-        exit $E_ASSERT_FAILED
+    if [ "$WHAT" == "equal" ]; then
+        if [ "$2" != "$3" ]; then
+            log ASSERT "$0 +$lineno :: Assertion failed:  \"$2\" == \"$3\"" FAILED
+            exit $E_ASSERT_FAILED
+        else
+            log ASSERT "$2 == $3" OK
+        fi  
+
     else
-        log ASSERT "$1 == $2" OK
-    fi  
+        log ASSERT "$0 +$lineno:: Unrecognized operator \"$1\"" ERROR
+        exit $E_PARAM_ERR
+    fi
 }
 
 fail() {
@@ -53,7 +62,7 @@ fail() {
 
     if [ -z ${2-} ]; then
         log ASSERT " $0 :: Missing LINENO" WARNING
-        return $E_PARAM_ERR
+        exit $E_PARAM_ERR
     fi
 
     lineno=$2
@@ -212,3 +221,39 @@ subscriptions() {
         "$SERVER:$PORT/$CHANNEL"
     )
 }
+
+expect() {
+    local WHAT="$1"
+
+    if [ "$WHAT" == "hook" ]; then
+        local URL="$2"
+        local DATA="$3"
+        local FILENAME="$4"
+
+        hookee "$URL" "$DATA" "$FILENAME" &
+        local PID="$!"
+        KILLME="$KILLME $PID"
+
+        sleep 0.1
+        log EXPECT "HTTP hook on [$PID] $URL with data \"$DATA\""
+
+    elif [ "$WHAT" == "file" ]; then
+        local FILENAME="$2"
+        log EXPECT "File with name \"$FILENAME\""
+
+        for X in 1 2 3 4 5; do
+            if [ -e "$FILENAME" ]; then
+                log EXPECT "$FILENAME" OK
+                local DATA=$(cat "$FILENAME")
+                echo "$DATA"
+                return
+            fi
+            sleep 0.1
+        done
+        fail "File with name \"$FILENAME\" never showed up" $LINENO
+    
+    else
+        fail "Don't know what \"$WHAT\"" $LINENO
+    fi
+}
+

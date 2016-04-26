@@ -45,6 +45,9 @@ class Channel(object):
         self.queue = queue.Queue()
         self.subscriptions = {}
         self._cached_has_replicators = None
+        self.worker = threading.Thread(target=self.pusher, name=name)
+        self.worker.daemon = True
+        self.worker.start()
 
     def to_string(self):
         result = 'Channel=%s\n' % self.name
@@ -56,6 +59,13 @@ class Channel(object):
         finally:
             self.lock.release()
         return result
+
+    def pusher(self):
+        while True:
+            message = self.queue.get()
+            for subscription in self.subscriptions.values():
+                requests.post(subscription.url, message.data)
+            self.queue.task_done()
 
     def has_replicators(self):
         if self._cached_has_replicators is not None:
@@ -97,6 +107,7 @@ class Channel(object):
 
             versions.current = message
             self.messages[message.key] = versions
+            self.queue.put(message)
         finally:
             self.lock.release()
 
@@ -117,6 +128,7 @@ class Channel(object):
                 else:
                     message.status == MessageStatus.ok
                     versions.current = message
+                self.queue.put(message)
             except KeyError:
                 raise MissingKey(message.key)
         finally:
