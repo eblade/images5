@@ -1,5 +1,0 @@
-Test run tis 26 apr 2016 23:21:56 BST, filter was 'subscribe-create'
-
-PASS test-subscribe-create-hook.sh
-
-Ran 1 tests. 1 passed, 0 failed and 9 were skipped.
