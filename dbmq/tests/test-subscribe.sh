@@ -18,7 +18,7 @@ run() {
 
     JSON=$(subscriptions "$CHANNEL")
     log JSON "$JSON"
-    echo "$JSON" | ./assert_json \
+    echo "$JSON" | assert_json \
         "json['a']['token'] == '$TOKEN1'" \
         "json['a']['channel'] == '$CHANNEL'" \
         "json['a']['type'] == 'topic'" \
@@ -35,7 +35,7 @@ run() {
 
     JSON=$(subscriptions "$CHANNEL")
     log JSON "$JSON"
-    echo "$JSON" | ./assert_json \
+    echo "$JSON" | assert_json \
         "json['a']['token'] == '$TOKEN1'" \
         "json['a']['channel'] == '$CHANNEL'" \
         "json['a']['type'] == 'topic'" \
@@ -52,7 +52,7 @@ run() {
 
     JSON=$(subscriptions "$CHANNEL")
     log JSON "$JSON"
-    echo "$JSON" | ./assert_json \
+    echo "$JSON" | assert_json \
         "len(json) == 1" \
         "json['a']['token'] == '$TOKEN1'" \
         "json['a']['channel'] == '$CHANNEL'" \
@@ -69,7 +69,7 @@ run() {
 
     JSON=$(subscriptions "$CHANNEL")
     log JSON "$JSON"
-    echo "$JSON" | ./assert_json \
+    echo "$JSON" | assert_json \
         "len(json) == 0" \
     || fail "Subscription list should be empty" $LINENO
 

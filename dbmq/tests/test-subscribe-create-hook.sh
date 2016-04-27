@@ -31,7 +31,7 @@ run() {
 
     local JSON=$(expect file "$RESULTFILE")
     log JSON "$JSON"
-    echo "$JSON" | ./assert_json \
+    echo "$JSON" | assert_json \
         "json['body'] == '$DATA'" \
     || fail "Bad hook data" $LINENO
 }
