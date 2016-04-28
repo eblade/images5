@@ -227,15 +227,14 @@ expect() {
 
     if [ "$WHAT" == "hook" ]; then
         local URL="$2"
-        local DATA="$3"
-        local FILENAME="$4"
+        local FILENAME="$3"
 
-        hookee "$URL" "$DATA" "$FILENAME" &
+        hookee "$URL" "$FILENAME" &
         local PID="$!"
         KILLME="$KILLME $PID"
 
         sleep 0.1
-        log EXPECT "HTTP hook on [$PID] $URL with data \"$DATA\""
+        log EXPECT "HTTP hook on [$PID] $URL"
 
     elif [ "$WHAT" == "file" ]; then
         local FILENAME="$2"

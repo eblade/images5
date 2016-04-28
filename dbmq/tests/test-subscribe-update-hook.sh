@@ -6,8 +6,9 @@ export FIXTURE="single"
 run() {
     local CHANNEL="test"
     local URL="http://localhost:8090/hook"
-    local KEY="subscribe-create-hook"
-    local DATA="testdata"
+    local KEY="subscribe-update-hook"
+    local DATA1="testdata1"
+    local DATA2="testdata2"
     local TOKEN1="$TOKEN"
     local TOKEN2="b"
     local SECRET1="$SECRET"
@@ -26,12 +27,25 @@ run() {
     TOKEN="$TOKEN2"
     SECRET="$SECRET2"
     
-    create "$CHANNEL" "$KEY" "$DATA"
+    create "$CHANNEL" "$KEY" "$DATA1"
     assert equal "$HTTP_STATUS" 201 $LINENO
 
     local JSON=$(expect file "$RESULTFILE")
     log JSON "$JSON"
     echo "$JSON" | assert_json \
-        "json['body'] == '$DATA'" \
+        "json['body'] == '$DATA1'" \
+    || fail "Bad hook data" $LINENO
+
+    # Creating another message with TOKEN2
+    TOKEN="$TOKEN2"
+    SECRET="$SECRET2"
+    
+    update "$CHANNEL" "$KEY" 1 "$DATA2"
+    assert equal "$HTTP_STATUS" 202 $LINENO
+
+    local JSON=$(expect file "$RESULTFILE")
+    log JSON "$JSON"
+    echo "$JSON" | assert_json \
+        "json['body'] == '$DATA2'" \
     || fail "Bad hook data" $LINENO
 }
