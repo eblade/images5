@@ -80,8 +80,6 @@ check() {
         --silent \
         -w "%{http_code}" -o >(cat >&3) \
         -X HEAD \
-        --header "Client-Token: $TOKEN" \
-        --header "Client-Secret: $SECRET" \
         --silent \
         "$SERVER:$PORT/"
     )
@@ -152,7 +150,7 @@ delete() {
     local KEY=$2
     local SOURCE_VERSION=$3
 
-    log DELETE "$CHANNEL/$KEY"
+    log DELETE "$CHANNEL/$KEY/$SOURCE_VERSION"
 
     exec 3>&1
 
@@ -245,14 +243,85 @@ expect() {
                 log EXPECT "$FILENAME" OK
                 local DATA=$(cat "$FILENAME")
                 echo "$DATA"
+                rm -f "$FILENAME"
                 return
             fi
             sleep 0.1
         done
         fail "File with name \"$FILENAME\" never showed up" $LINENO
+        rm -f "$FILENAME"
     
     else
         fail "Don't know what \"$WHAT\"" $LINENO
+        rm -f "$FILENAME"
     fi
 }
 
+start_server() {
+    local CONFIG="$1"
+    local HERE="$(pwd)"
+    cd "../.."
+
+    log SERVER "Starting server $CONFIG starter." OK
+    if [ ! -e "testdata/$CONFIG" ]; then
+        log SERVER "Server $CONFIG does not exist. Exiting." FAILED
+        exit 96
+    fi
+
+    python3 -m dbmq "testdata/$CONFIG" &
+    cd "$HERE"
+    local PID=$!
+    KILLME="$KILLME $PID"
+    if [ -e "/proc/$PID" ]; then
+        log SERVER "Server $CONFIG started ok (PID=$PID)." OK
+    else
+        log SERVER "Server $CONFIG crashed. Exiting." FAILED
+        exit 97
+    fi
+}
+
+wait_for_server() {
+    local CONFIG="$1"
+
+    select_server "$CONFIG"
+
+    for X in 1 2 3 4 5; do
+        sleep 0.2
+        check
+        if [ "$HTTP_STATUS" == "204" ]; then
+            log SERVER "Server responds ok." OK
+            return 0
+        fi
+    done
+    log SERVER "Server does not respond." FAILED
+    fail "Server $CONFIG does not respond." $LINENO
+}
+
+select_server() {
+    local CONFIG="$1"
+    
+    if [ ! -e "../../testdata/$CONFIG" ]; then
+        log SERVER "Server $CONFIG does not exist. Exiting." FAILED
+        exit 96
+    fi
+
+    export SERVER=$(readini "../../testdata/$CONFIG" "Server" "interface")
+    export PORT=$(readini "../../testdata/$CONFIG" "Server" "port")
+
+    log SERVER "Select $SERVER:$PORT"
+}
+
+select_client() {
+    local CONFIG="$1"
+    
+    if [ ! -e "../../testdata/$CONFIG" ]; then
+        log CLIENT "Client $CONFIG does not exist. Exiting." FAILED
+        exit 96
+    fi
+
+    log WORKING $(pwd)
+    export TOKEN=$(readini "../../testdata/$CONFIG" "Client" "token")
+    export SECRET=$(readini "../../testdata/$CONFIG" "Client" "secret")
+
+    log CLIENT "Select $TOKEN:$SECRET"
+}

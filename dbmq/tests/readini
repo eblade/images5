@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+
+import sys
+import configparser
+
+
+try:
+    path, section, key = sys.argv[1:]
+except IndexError:
+    sys.stderr.write('Expected: readini CONFIG SECTION\n')
+
+config = configparser.ConfigParser()
+config.read(path)
+
+sys.stdout.write(config[section][key])

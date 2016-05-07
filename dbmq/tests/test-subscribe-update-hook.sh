@@ -1,6 +1,6 @@
 #/bin/bash
 
-export DESCRIPTION="After subscribing, a created message should spawn an event on the hook."
+export DESCRIPTION="Subscribe, create and update with different tokens, expect two hooks."
 export FIXTURE="single"
 
 run() {
@@ -36,7 +36,7 @@ run() {
         "json['body'] == '$DATA1'" \
     || fail "Bad hook data" $LINENO
 
-    # Creating another message with TOKEN2
+    # Updating the message with TOKEN2
     TOKEN="$TOKEN2"
     SECRET="$SECRET2"
     

@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+
+import sys
 import threading
 import bottle
 import requests
@@ -5,6 +8,7 @@ import enum
 import time
 import queue
 import json
+import configparser
 
 
 class ChannelError(bottle.HTTPError):
@@ -37,6 +41,11 @@ class BadSubscriptionType(bottle.HTTPError):
         super(BadSubscriptionType, self).__init__(400, 'Bad Subscription Type "%s"' % str(type))
 
 
+class InactiveVersion(bottle.HTTPError):
+    def __init__(self, key, version):
+        super(InactiveVersion, self).__init__(409, 'Inactive Version "%s/%i"' % (key, version))
+
+
 class Channel(object):
     def __init__(self, name):
         self.name = name
@@ -64,7 +73,8 @@ class Channel(object):
         while True:
             message = self.queue.get()
             for subscription in self.subscriptions.values():
-                requests.post(subscription.url, message.data)
+                headers = message.get_headers()
+                requests.post(subscription.url, message.data, headers=headers)
             self.queue.task_done()
 
     def has_replicators(self):
@@ -94,6 +104,7 @@ class Channel(object):
         assert message.version == 1
 
         message.status = MessageStatus.ok
+        message.headers['Event-Type'] = 'create'
         try:
             self.lock.acquire()
             try:
@@ -116,6 +127,7 @@ class Channel(object):
         assert message.version
         assert message.status == MessageStatus.pending
 
+        message.headers['Event-Type'] = 'update'
         try:
             self.lock.acquire()
             try:
@@ -155,8 +167,10 @@ class Channel(object):
 
                 versions.current.headers['Deleted'] = deleted
                 versions.current.headers['Deleted-By'] = deleted_by
+                versions.current.headers['Event-Type'] = 'delete'
                 versions.deleted = versions.current
                 versions.current = None
+                self.queue.put(versions.deleted)
             except KeyError:
                 raise MissingKey(message.key)
         finally:
@@ -199,6 +213,11 @@ class Message(object):
 
     def __str__(self):
         return '<Message %s/%i "%s">' % (self.key, self.version, str(self.data, 'utf8'))
+
+    def get_headers(self):
+        headers = {k: str(v) for k, v in self.headers.items()}
+        headers.update({'Key': self.key, 'Version': str(self.version), 'Status': str(self.status)})
+        return headers
 
 
 class MessageVersions(object):
@@ -322,7 +341,7 @@ class DBMQ(object):
         channel.update(message)
         print(channel.to_string())
 
-    def delete(self, node_token, node_secret, channel_name, key, headers):
+    def delete(self, node_token, node_secret, channel_name, key, source_version, headers):
         self.authenticate(node_token, node_secret)
         assert channel_name
         assert key
@@ -333,6 +352,7 @@ class DBMQ(object):
         headers['Deleted-By'] = node_token
         headers['Deleted'] = now
         message = Message(key, None, headers)
+        message.version = int(source_version)
         channel.delete(message)
 
     def subscribe(self, node_token, node_secret, channel_name, type, url):
@@ -388,6 +408,12 @@ class DBMQ(object):
 
 
 if __name__ == '__main__':
+    config = configparser.ConfigParser()
+    config.read(sys.argv[1])
+
+    server_interface = config['Server']['interface']
+    server_port = config['Server']['port']
+
     dbmq = DBMQ()
     http = bottle.Bottle()
     
@@ -431,7 +457,7 @@ if __name__ == '__main__':
         node_secret = bottle.request.headers.get('Client-Secret')
         source_version = bottle.request.headers.get('Source-Version')
         headers = {k: v for k, v in bottle.request.headers.items() if k.startswith('X-')}
-        dbmq.delete(node_token, node_secret, channel, key, headers)
+        dbmq.delete(node_token, node_secret, channel, key, source_version, headers)
         raise bottle.HTTPResponse(status=204)
 
     @http.post('/<channel>')
@@ -459,4 +485,4 @@ if __name__ == '__main__':
         raise bottle.HTTPResponse(body=json.dumps(data, indent=2, sort_keys=True, default=lambda x: x.to_dict()), status=200)
 
     bottle.debug(True)
-    http.run(port=8080)
+    http.run(host=server_interface, port=server_port)

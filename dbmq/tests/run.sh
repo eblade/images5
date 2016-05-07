@@ -19,7 +19,7 @@ if [ -n "$FIXTURE" ]; then
     source "$FIXTURE"
     
     log FIXTURE "Setting up fixture ${FIXTURE}..."
-    setup-fixture
+    PATH=".:$PATH" setup-fixture
     log FIXTURE "Done setting up fixture ${FIXTURE}." OK
 fi
 
